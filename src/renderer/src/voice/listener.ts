@@ -1,6 +1,7 @@
 // Records one spoken request from the microphone at 16 kHz (what Whisper
 // expects), stopping automatically when the user goes quiet.
 import { rms, Vad, type VadResult } from './vad'
+import { acquireMic, releaseMic } from './mic'
 
 export interface ListenResult {
   audio: Float32Array | null
@@ -15,20 +16,27 @@ export interface Listening {
 const SAMPLE_RATE = 16000
 const FRAME = 1024 // samples per frame, about 64 ms
 
-export function listen(onLevel?: (level: number, state: VadResult, threshold: number) => void): Listening {
+/**
+ * @param preRoll audio already heard (from the wake word) to put in front of
+ *   the recording, so a sentence that started with the name isn't cut.
+ */
+export function listen(
+  onLevel?: (level: number, state: VadResult, threshold: number) => void,
+  preRoll?: Float32Array | null
+): Listening {
   let cancel = () => {}
   const result = new Promise<ListenResult>((resolve, reject) => {
     let finished = false
-    const chunks: Float32Array[] = []
+    const chunks: Float32Array[] = preRoll ? [preRoll] : []
     const vad = new Vad()
-    let stream: MediaStream | null = null
+    let haveMic = false
     let ctx: AudioContext | null = null
 
     const finish = (reason: ListenResult['reason']) => {
       if (finished) return
       finished = true
-      stream?.getTracks().forEach((t) => t.stop())
       void ctx?.close()
+      if (haveMic) releaseMic()
       if (reason !== 'done') return resolve({ audio: null, reason })
       const total = chunks.reduce((n, c) => n + c.length, 0)
       const audio = new Float32Array(total)
@@ -41,14 +49,13 @@ export function listen(onLevel?: (level: number, state: VadResult, threshold: nu
     }
     cancel = () => finish('cancelled')
 
-    navigator.mediaDevices
-      .getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } })
+    acquireMic()
       .then((s) => {
+        haveMic = true
         if (finished) {
-          s.getTracks().forEach((t) => t.stop())
+          releaseMic()
           return
         }
-        stream = s
         ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
         const source = ctx.createMediaStreamSource(s)
         // ScriptProcessor is old but simple and fine for short recordings.
