@@ -1,6 +1,7 @@
 import type { CompanionApi } from '@shared/ipc'
 import { PERSONAS } from '@shared/personas'
 import { PROVIDERS, type ProviderId, type PublicSettings } from '@shared/settings'
+import { ACTION_LABELS, ACTION_TYPES, CAN_ALWAYS_ALLOW } from '@shared/actions'
 
 const api = (window as unknown as { companion: CompanionApi }).companion
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -20,6 +21,7 @@ const voiceOutput = $<HTMLInputElement>('voiceOutput')
 const sttSize = $<HTMLSelectElement>('sttSize')
 const wakeWord = $<HTMLInputElement>('wakeWord')
 const wakeName = $<HTMLSpanElement>('wakeName')
+const alwaysAllow = $<HTMLDivElement>('alwaysAllow')
 
 let current: PublicSettings
 
@@ -49,6 +51,22 @@ function render(): void {
   wakeWord.checked = current.wakeWord
   wakeName.textContent = PERSONAS.find((p) => p.id === current.personaId)?.name ?? 'Robotico'
   sttSize.value = current.sttSize
+  alwaysAllow.replaceChildren(
+    ...ACTION_TYPES.filter((t) => CAN_ALWAYS_ALLOW.has(t)).map((t) => {
+      const label = document.createElement('label')
+      const box = document.createElement('input')
+      box.type = 'checkbox'
+      box.style.cssText = 'width: auto; margin-right: 6px'
+      box.checked = current.alwaysAllow.includes(t)
+      box.addEventListener('change', () => {
+        current.alwaysAllow = box.checked
+          ? [...new Set([...current.alwaysAllow, t])]
+          : current.alwaysAllow.filter((x) => x !== t)
+      })
+      label.append(box, ACTION_LABELS[t])
+      return label
+    })
+  )
 }
 
 persona.addEventListener('change', () => {
@@ -81,6 +99,8 @@ $('removeKey').addEventListener('click', async () => {
   render()
   flash('Key removed.')
 })
+
+$('openLog').addEventListener('click', () => api.openActivityLog())
 
 $('clearMemory').addEventListener('click', async () => {
   await api.clearMemory()
