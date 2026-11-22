@@ -31,6 +31,15 @@ describe('Vad', () => {
     // Background at 0.03 should not count as speech.
     expect(run(new Vad(), noisy(3000))).toBe('waiting')
   })
+  it('works when the user starts talking immediately', () => {
+    // Speech with natural gaps between words, from the very first frame.
+    const words = Array.from({ length: 40 }, (_, i) => (i % 5 === 4 ? 0.004 : 0.08))
+    expect(run(new Vad(), [...words, ...quiet(1300)])).toBe('done')
+  })
+  it('hears a quiet microphone', () => {
+    const soft = (ms: number) => Array(ms / 50).fill(0.012)
+    expect(run(new Vad(), [...quiet(300), ...soft(1000), ...quiet(1300)])).toBe('done')
+  })
   it('stops at the hard cap', () => {
     expect(run(new Vad({ maxMs: 2000 }), [...quiet(300), ...loud(3000)])).toBe('done')
   })

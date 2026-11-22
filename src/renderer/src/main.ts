@@ -94,8 +94,15 @@ async function startVoice(): Promise<void> {
   summon()
   character?.setEmotion('neutral')
   chat.status('Listening…')
-  listening = listen((_level, state) => {
+  let lastBars = -1
+  listening = listen((level, state, threshold) => {
     if (state === 'speaking') character?.setEmotion('happy')
+    // A little level meter so it's obvious the mic is hearing you.
+    const bars = Math.min(5, Math.round((level / threshold) * 1.5))
+    if (bars !== lastBars) {
+      lastBars = bars
+      chat.status(`Listening… ${'▮'.repeat(bars)}${'▯'.repeat(5 - bars)}`)
+    }
   })
   try {
     const { audio, reason } = await listening.result
@@ -103,7 +110,7 @@ async function startVoice(): Promise<void> {
     if (reason === 'cancelled') return chat.hide()
     if (!audio) {
       character?.setEmotion('sad')
-      return chat.say("I didn't hear anything.")
+      return chat.say("I didn't hear anything. Is the right microphone set as default in Windows sound settings?")
     }
     chat.status('…')
     const text = await transcribe(audio, settings.sttSize, (pct) =>

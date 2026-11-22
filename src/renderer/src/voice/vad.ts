@@ -1,5 +1,9 @@
 // A small voice-activity detector: decides when the user has started and
 // finished talking, from the loudness (RMS) of short audio frames.
+//
+// The background-noise level is the quietest loudness seen so far (slowly
+// creeping up so it can adapt), so it still works when the user starts
+// talking the instant they press the hotkey.
 
 export type VadResult = 'waiting' | 'speaking' | 'done' | 'no-speech'
 
@@ -12,40 +16,38 @@ export interface VadOptions {
   maxMs?: number
   /** Speech must last this long to count (filters clicks). */
   minSpeechMs?: number
-  /** Time at the start used to measure background noise. */
-  calibrationMs?: number
 }
+
+/** Speech must be this many times louder than the background. */
+const RATIO = 3
+/** Lowest and highest speech thresholds, so quiet mics and noisy rooms both work. */
+const MIN_THRESHOLD = 0.005
+const MAX_THRESHOLD = 0.03
 
 export class Vad {
   private readonly o: Required<VadOptions>
   private elapsed = 0
-  private noiseSum = 0
-  private noiseFrames = 0
-  private threshold = 0.015
+  private noise = Infinity
   private loudFor = 0
   private quietFor = 0
   private started = false
 
   constructor(opts: VadOptions = {}) {
-    this.o = {
-      endSilenceMs: 1100,
-      noSpeechTimeoutMs: 7000,
-      maxMs: 20000,
-      minSpeechMs: 150,
-      calibrationMs: 300,
-      ...opts
-    }
+    this.o = { endSilenceMs: 1200, noSpeechTimeoutMs: 8000, maxMs: 20000, minSpeechMs: 150, ...opts }
+  }
+
+  /** Current speech threshold, for debugging and level meters. */
+  get threshold(): number {
+    const base = Number.isFinite(this.noise) ? this.noise * RATIO : MIN_THRESHOLD
+    return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, base))
   }
 
   /** Feed one frame. Returns the state after it. */
   push(rms: number, frameMs: number): VadResult {
     this.elapsed += frameMs
-    if (this.elapsed <= this.o.calibrationMs) {
-      this.noiseSum += rms
-      this.noiseFrames++
-      this.threshold = Math.max(0.012, (this.noiseSum / this.noiseFrames) * 3)
-      return 'waiting'
-    }
+    // Track the noise floor: drop instantly to quieter frames, creep up slowly.
+    this.noise = rms < this.noise ? rms : this.noise * (1 + 0.0005 * frameMs)
+
     if (this.elapsed >= this.o.maxMs) return this.started ? 'done' : 'no-speech'
 
     const loud = rms > this.threshold
