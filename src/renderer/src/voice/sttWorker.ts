@@ -34,7 +34,8 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   if (msg.type !== 'transcribe') return
   try {
     const asr = await getAsr(msg.model)
-    const out = await asr(msg.audio, { language: 'english', task: 'transcribe' })
+    // The .en models are English-only, so no language or task options.
+    const out = await asr(msg.audio)
     const text = (Array.isArray(out) ? out.map((o) => o.text).join(' ') : out.text).trim()
     post({ type: 'result', id: msg.id, text })
   } catch (err) {
