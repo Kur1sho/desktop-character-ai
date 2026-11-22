@@ -37,7 +37,7 @@ function render(): void {
   model.value = current.models[current.provider] ?? ''
   model.placeholder = info.defaultModel
   modelHint.textContent = info.modelHint
-  ollamaBox.style.display = info.needsKey ? 'none' : ''
+  ollamaBox.style.display = current.provider === 'ollama' ? '' : 'none'
   ollamaUrl.value = current.ollamaUrl
   keyBox.style.display = info.needsKey ? '' : 'none'
   key.value = ''

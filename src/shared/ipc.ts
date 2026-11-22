@@ -12,6 +12,8 @@ export const IPC = {
   openChat: 'companion:open-chat',
   listen: 'companion:listen',
   chat: 'companion:chat',
+  chatPrepare: 'companion:chat-prepare',
+  chatRecord: 'companion:chat-record',
   personaChanged: 'companion:persona-changed',
   settingsChanged: 'companion:settings-changed',
   getSettings: 'settings:get',
@@ -48,6 +50,10 @@ export interface CompanionApi {
   getInitialModel(): Promise<{ data: ArrayBuffer; name: string } | null>
   /** Sends a message to the character and returns its reply. */
   chat(text: string): Promise<ChatReply>
+  /** For the built-in brain: the system prompt and history to send, including the new message. */
+  chatPrepare(text: string): Promise<{ system: string; history: { role: 'user' | 'assistant'; content: string }[] }>
+  /** For the built-in brain: saves the exchange to local history. */
+  chatRecord(userText: string, reply: string): Promise<void>
   getSettings(): Promise<PublicSettings>
   saveSettings(settings: Settings): Promise<void>
   /** Saves (or with null, removes) an API key. The key is encrypted and never sent back. */
