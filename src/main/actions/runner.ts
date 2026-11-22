@@ -11,9 +11,10 @@ import { bestAppMatch, describeAction, validateAction, type Action, type ActionR
 
 const isWindows = process.platform === 'win32'
 
-function run(file: string, args: string[], timeoutMs = 15000): Promise<string> {
+function run(file: string, args: string[], timeoutMs = 15000, env?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout) =>
+    const options = { timeout: timeoutMs, windowsHide: true, env: env ? { ...process.env, ...env } : process.env }
+    execFile(file, args, options, (err, stdout) =>
       err ? reject(err) : resolve(String(stdout))
     )
   })
@@ -124,6 +125,73 @@ while ((Get-Date) -lt $deadline) {
 exit 3
 `
 
+/**
+ * Presses play on a playlist by name. With SPOTIFY_MODE=library it looks in
+ * Your Library (the user's own playlists); with SPOTIFY_MODE=search it looks
+ * at the search results. The name is passed in an environment variable, so
+ * it's only ever data, never part of the command.
+ */
+const PRESS_PLAYLIST = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$A = [System.Windows.Automation.AutomationElement]
+$scope = [System.Windows.Automation.TreeScope]::Descendants
+$isButton = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+function Norm([string]$s) { (($s.ToLower() -replace '[^a-z0-9 ]', '') -replace 'ing\\b', 'in') -replace ' ', '' }
+$want = Norm $env:SPOTIFY_TARGET
+if (-not $want) { exit 3 }
+$wait = if ($env:SPOTIFY_MODE -eq 'search') { 1200 } else { 300 }
+Start-Sleep -Milliseconds $wait
+$deadline = (Get-Date).AddSeconds(10)
+while ((Get-Date) -lt $deadline) {
+  $p = Get-Process Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if ($p) {
+    $root = $A::FromHandle($p.MainWindowHandle)
+    $best = $null
+    foreach ($b in $root.FindAll($scope, $isButton)) {
+      $n = $b.Current.Name
+      if ($n -notlike 'Play *') { continue }
+      $name = Norm $n.Substring(5)
+      if ($name -eq $want) { $best = $b; break }
+      if (-not $best -and $name.Contains($want)) { $best = $b }
+    }
+    if ($best) {
+      $best.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+      Write-Output $best.Current.Name.Substring(5)
+      exit 0
+    }
+    if ($env:SPOTIFY_MODE -ne 'search') { exit 4 }
+  }
+  Start-Sleep -Milliseconds 400
+}
+exit 3
+`
+
+/** Plays a playlist: the user's own first (Your Library), then search results. */
+async function playPlaylist(name: string): Promise<ActionResult> {
+  const press = (mode: 'library' | 'search') =>
+    run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PRESS_PLAYLIST], 20000, {
+      SPOTIFY_TARGET: name,
+      SPOTIFY_MODE: mode
+    }).then((out) => out.trim())
+  if (!isWindows) {
+    await showInSpotify(name)
+    return { ok: true, message: `Opened "${name}" in Spotify.` }
+  }
+  await shell.openExternal('spotify:').catch(() => undefined)
+  try {
+    return { ok: true, message: `Playing your playlist ${await press('library')}.` }
+  } catch {
+    /* not in their library: search for it */
+  }
+  await showInSpotify(name)
+  try {
+    return { ok: true, message: `Playing the playlist ${await press('search')}.` }
+  } catch {
+    return { ok: true, message: `I couldn't find a playlist called "${name}", so I opened the search in Spotify.` }
+  }
+}
+
 /** Opens the search in Spotify and presses play on the top result. Falls back to just showing the search. */
 async function playOnSpotify(query: string): Promise<ActionResult> {
   await showInSpotify(query)
@@ -173,7 +241,7 @@ export async function runAction(raw: unknown, source: 'user' | 'ai'): Promise<Ac
         result = { ok: true, message: `Searched for "${action.query}".` }
         break
       case 'spotify':
-        result = await playOnSpotify(action.query)
+        result = action.playlist ? await playPlaylist(action.query) : await playOnSpotify(action.query)
         break
       case 'media':
         await pressKey(action.key)
