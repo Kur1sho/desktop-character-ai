@@ -10,8 +10,10 @@ export const IPC = {
   getInitialModel: 'companion:get-initial-model',
   summon: 'companion:summon',
   openChat: 'companion:open-chat',
+  listen: 'companion:listen',
   chat: 'companion:chat',
   personaChanged: 'companion:persona-changed',
+  settingsChanged: 'companion:settings-changed',
   getSettings: 'settings:get',
   saveSettings: 'settings:save',
   setApiKey: 'settings:set-key',
@@ -36,6 +38,10 @@ export interface CompanionApi {
   onSummon(cb: () => void): void
   /** Called when the user asks to type to the character (tray menu or hotkey). */
   onOpenChat(cb: () => void): void
+  /** Called after any settings change is saved. */
+  onSettingsChanged(cb: () => void): void
+  /** Called when the user presses the talk hotkey. */
+  onListen(cb: () => void): void
   /** Called when the chosen character changes in Settings. */
   onPersonaChanged(cb: (personaId: string) => void): void
   /** Returns the default VRM model if one is in assets/characters, or null. */

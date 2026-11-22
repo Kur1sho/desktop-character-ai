@@ -67,6 +67,12 @@ export function createRobotico(): Character {
     head.add(cheek)
   }
 
+  // A pixel mouth on the screen; it opens while talking.
+  const mouth = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.03, 0.01, 2, 0.012), eyeMat)
+  mouth.position.set(0, -0.08, 0.225)
+  head.add(mouth)
+  let mouthOpen = 0
+
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), trim)
   antenna.position.y = 0.3
   head.add(antenna)
@@ -117,6 +123,9 @@ export function createRobotico(): Character {
     setEmotion(next) {
       emotion = next
     },
+    setMouth(open) {
+      mouthOpen = open
+    },
     update(dt, time) {
       clock = time
       const shape = EYE_SHAPES[emotion]
@@ -131,6 +140,8 @@ export function createRobotico(): Character {
         e.position.y += (0.02 + shape.dy - e.position.y) * ek
       })
       eyeMat.color.lerp(new THREE.Color(shape.color), ek)
+      mouth.scale.y += (1 + mouthOpen * 2.6 - mouth.scale.y) * Math.min(1, dt * 25)
+      mouth.scale.x = emotion === 'happy' ? 1.2 : 1
       blushMat.opacity += ((emotion === 'flustered' ? 0.9 : 0) - blushMat.opacity) * ek
       const b = breath(time)
       body.position.y = 0.02 + b * 0.012
