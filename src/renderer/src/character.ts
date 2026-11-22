@@ -8,6 +8,8 @@ export interface DanceMove {
   count: number
   /** 0 to 1, how loud the music is. */
   intensity: number
+  /** Arm style for the current move. */
+  arms: 'pump' | 'up' | 'out' | 'low'
 }
 
 /** Anything the app can put on the desktop: the built-in robot or a VRM model. */

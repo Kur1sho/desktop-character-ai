@@ -167,12 +167,27 @@ export function createRobotico(): Character {
       if (!move) return
       // Arms pump up on the beat, alternating sides; the head bobs.
       const hit = Math.pow(1 - move.phase, 2)
-      const up = (0.2 + 0.22 * move.intensity) * hit
+      const beat = move.count + move.phase
       const left = move.count % 2 === 0
-      hands[0].position.set(-0.36, 0.36 + (left ? up : up * 0.25), 0.06)
-      hands[1].position.set(0.36, 0.36 + (left ? up * 0.25 : up), 0.06)
-      head.rotation.x += 0.12 * hit
-      head.rotation.z = Math.sin((move.count + move.phase) * Math.PI) * 0.12
+      if (move.arms === 'up') {
+        // Both arms up, punching on the beat.
+        hands[0].position.set(-0.3, 0.78 + 0.06 * hit, 0.06)
+        hands[1].position.set(0.3, 0.78 + 0.06 * hit, 0.06)
+      } else if (move.arms === 'out') {
+        // Arms out wide, gently waving.
+        hands[0].position.set(-0.58, 0.5 + Math.sin(beat * Math.PI) * 0.05, 0.02)
+        hands[1].position.set(0.58, 0.5 - Math.sin(beat * Math.PI) * 0.05, 0.02)
+      } else if (move.arms === 'low') {
+        // Slow and low for moody songs.
+        hands[0].position.set(-0.34, 0.3 + Math.sin((beat * Math.PI) / 2) * 0.04, 0.06)
+        hands[1].position.set(0.34, 0.3 - Math.sin((beat * Math.PI) / 2) * 0.04, 0.06)
+      } else {
+        const up = (0.2 + 0.22 * move.intensity) * hit
+        hands[0].position.set(-0.36, 0.36 + (left ? up : up * 0.25), 0.06)
+        hands[1].position.set(0.36, 0.36 + (left ? up * 0.25 : up), 0.06)
+      }
+      head.rotation.x += (move.arms === 'low' ? 0.04 : 0.12) * hit
+      head.rotation.z = Math.sin(beat * Math.PI) * (move.arms === 'low' ? 0.06 : 0.12)
     },
     dispose() {
       root.traverse((o) => {
