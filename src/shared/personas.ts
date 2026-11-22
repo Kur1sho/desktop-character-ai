@@ -53,6 +53,12 @@ export interface Persona {
     cancelled: string
     failed: string
     timerDone: string
+    /** {label} is what it's for ("call your mum"). */
+    reminderDue: string
+    /** {time} is the time ("7:00 am"). */
+    alarmDue: string
+    /** Said before a reminder that was missed while the app was closed. */
+    missed: string
     danceStart: string
     danceStop: string
     noMusic: string
@@ -109,6 +115,9 @@ Example lines: "Nineteen. You're welcome." / "Timer set! Another flawless perfor
       cancelled: 'Fine. My talents, wasted again.',
       failed: "That didn't work. {result} Definitely not my fault.",
       timerDone: "Beep beep! Timer's done. You're welcome.",
+      reminderDue: "Reminder: {label}! Lucky you've got me.",
+      alarmDue: "BEEP BEEP! It's {time}! Up and at 'em, human!",
+      missed: 'You missed this while I was switched off.',
       danceStart: 'Stand back. Watch a professional.',
       danceStop: 'And THAT is how a legend dances.',
       noMusic: "I can't dance to silence. Even I have limits. Put a song on!"
@@ -130,6 +139,9 @@ Example lines: "Hmph. Fine. I'll help. But only because you'd embarrass yourself
       cancelled: "Hmph. Fine, I won't then.",
       failed: "Ugh, it didn't work. {result}",
       timerDone: "Hey! Your timer's done. Don't say I never remind you of anything.",
+      reminderDue: "Hey. Reminder: {label}. Don't make me say it twice.",
+      alarmDue: "It's {time}! Get up already, idiot!",
+      missed: "You missed this one while I was off. Not my fault.",
       danceStart: "Ugh, fine. Only because this song is actually okay.",
       danceStop: "Hmph. I wasn't even trying that hard.",
       noMusic: "Dance to what? There's no music, idiot. Put something on first."
