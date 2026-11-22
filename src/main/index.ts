@@ -235,21 +235,31 @@ app.whenReady().then(() => {
   globalShortcut.register(TALK_HOTKEY, startListening)
   globalShortcut.register(TYPE_HOTKEY, openChat)
   // Only our own pages may use the microphone, and nothing else.
+  // The microphone, and the PC's sound for dancing ('display-capture'), are
+  // allowed for the companion window only.
+  const allowed = (permission: string) => permission === 'media' || permission === 'display-capture'
+  const isCompanion = (wc: Electron.WebContents | null) => Boolean(wc && win && wc.id === win.webContents.id)
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
-    callback(permission === 'media' && wc === win?.webContents)
+    callback(allowed(permission) && isCompanion(wc))
   })
-  session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && wc === win?.webContents)
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => allowed(permission) && isCompanion(wc))
   // Dancing: give the companion window the PC's sound (Windows loopback), with
   // no picker. Only that window may ask; the screen video it comes with is
   // dropped by the window straight away.
   session.defaultSession.setDisplayMediaRequestHandler(
     (request, callback) => {
       const from = request.frame ? webContents.fromFrame(request.frame) : null
-      if (!win || from !== win.webContents || process.platform !== 'win32') return callback({})
+      if (!isCompanion(from ?? null) || process.platform !== 'win32') {
+        console.warn('Sound capture refused:', process.platform, from?.getURL())
+        return callback({})
+      }
       desktopCapturer
         .getSources({ types: ['screen'] })
         .then((sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
-        .catch(() => callback({}))
+        .catch((err) => {
+          console.error('Sound capture failed:', err)
+          callback({})
+        })
     },
     { useSystemPicker: false }
   )

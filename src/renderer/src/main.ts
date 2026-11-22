@@ -221,7 +221,8 @@ async function startDancing(): Promise<void> {
   } catch (err) {
     console.error('Music listening failed:', err)
     character?.setEmotion('sad')
-    chat.say("I can't hear your PC's sound right now. (Dancing needs Windows.)")
+    const why = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    chat.say(`I can't hear your PC's sound right now. (${why})`, { error: true })
     return
   }
   danceStartedAt = performance.now()
