@@ -55,3 +55,12 @@ describe('parseEmotion with stray tags', () => {
     expect(parseEmotion('[happy] Hi! [smug]')).toEqual({ emotion: 'happy', text: 'Hi!' })
   })
 })
+
+describe('Robotico personality', () => {
+  it('stays cheerful but gives him a reason to show every emotion', () => {
+    const prompt = systemPrompt(getPersona('robotico'))
+    for (const e of ['love', 'flustered', 'smug', 'scared', 'sad', 'angry']) expect(prompt).toContain(`- ${e}`)
+    expect(prompt).toContain('use the whole range')
+    expect(getPersona('robotico').resting).toBe('happy')
+  })
+})

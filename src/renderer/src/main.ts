@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
 import type { ChatReply } from '@shared/ipc'
-import { getPersona, parseEmotion } from '@shared/personas'
+import { getPersona, parseEmotion, type Emotion } from '@shared/personas'
 import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
 import { think, warmUp } from './brain/brain'
 import type { Character } from './character'
@@ -64,6 +64,10 @@ pivot.add(body)
 scene.add(stage)
 
 let character: Character | null = null
+/** Shows an emotion; "neutral" means the character's resting face (a smile for cheerful Robotico). */
+function feel(e: Emotion): void {
+  character?.setEmotion(e === 'neutral' ? (getPersona(settings.personaId).resting ?? 'neutral') : e)
+}
 let settings: Settings = { ...DEFAULT_SETTINGS }
 
 /** Sends a message to whichever AI is chosen. The built-in brain runs right here. */
@@ -94,7 +98,7 @@ function sayAloud(text: string): Promise<void> {
 
 const chat = createChat(
   api ? ask : null,
-  (emotion) => character?.setEmotion(emotion),
+  (emotion) => feel(emotion),
   (text) => void sayAloud(text),
   (list, source, intro) => (actions ? actions.run(list, source, intro) : Promise.resolve()),
   (text) => {
@@ -130,7 +134,7 @@ const actions = api
       chat,
       settings: () => settings,
       persona: () => getPersona(settings.personaId),
-      setEmotion: (e) => character?.setEmotion(e),
+      setEmotion: (e) => feel(e),
       speak: sayAloud,
       summon: () => summon(),
       hear,
@@ -197,14 +201,14 @@ async function runSetup(jobs: Promise<void>[]): Promise<void> {
   if (setupRunning || !api) return
   setupRunning = true
   summon()
-  character?.setEmotion('happy')
+  feel('happy')
   chat.status('Getting ready (one time only)… 0%')
   const results = await Promise.allSettled(jobs)
   setupRunning = false
   const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
   if (failed) {
     // Not marked as done, so it tries again next launch.
-    character?.setEmotion('sad')
+    feel('sad')
     chat.say(failed.reason instanceof Error ? failed.reason.message : String(failed.reason), { error: true })
     return
   }
@@ -232,13 +236,13 @@ async function startDancing(): Promise<void> {
     music = await listenToMusic()
   } catch (err) {
     console.error('Music listening failed:', err)
-    character?.setEmotion('sad')
+    feel('sad')
     const why = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
     chat.say(`I can't hear your PC's sound right now. (${why})`, { error: true })
     return
   }
   danceStartedAt = performance.now()
-  character?.setEmotion('happy')
+  feel('happy')
   chat.say(lines.danceStart)
   void sayAloud(lines.danceStart)
 }
@@ -271,7 +275,7 @@ function danceFrame(): void {
   const mood = moodTracker.push(now, s.hit, s.bpm, s.centroid)
   if (mood !== lastMood) {
     lastMood = mood
-    character.setEmotion(mood === 'hype' ? 'happy' : mood === 'chill' ? 'sleepy' : 'neutral')
+    feel(mood === 'hype' ? 'happy' : mood === 'chill' ? 'sleepy' : 'neutral')
   }
   let target: Pose
   if (!s.bpm) {
@@ -308,11 +312,11 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
   }
   interrupt()
   summon()
-  character?.setEmotion('neutral')
+  feel('neutral')
   chat.status('Listening…')
   let lastBars = -1
   listening = listen((level, state, threshold) => {
-    if (state === 'speaking') character?.setEmotion('happy')
+    if (state === 'speaking') feel('happy')
     // A little level meter so it's obvious the mic is hearing you.
     const bars = Math.min(5, Math.round((level / threshold) * 1.5))
     if (bars !== lastBars) {
@@ -325,7 +329,7 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
     listening = null
     if (reason === 'cancelled') return chat.hide()
     if (!audio) {
-      character?.setEmotion('sad')
+      feel('sad')
       return chat.say("I didn't hear anything. Is the right microphone set as default in Windows sound settings?")
     }
     chat.status('…')
@@ -336,7 +340,7 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
     const wake = preRoll ? matchWakeWord(heard, getPersona(settings.personaId).name) : null
     const text = wake?.matched && wake.rest ? wake.rest : heard
     if (!text || /^\[.*\]$/.test(text)) {
-      character?.setEmotion('sad')
+      feel('sad')
       return chat.say("Sorry, I didn't catch that.")
     }
     thinking = true
@@ -347,7 +351,7 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
     })
   } catch (err) {
     listening = null
-    character?.setEmotion('sad')
+    feel('sad')
     chat.say(err instanceof Error ? err.message : String(err), { error: true })
   }
 }
@@ -375,6 +379,7 @@ function setCharacter(next: Character): void {
     character.dispose()
   }
   character = next
+  feel('neutral')
   const scale = CHARACTER_PX / next.height
   next.root.scale.setScalar(scale)
   body.add(next.root)
