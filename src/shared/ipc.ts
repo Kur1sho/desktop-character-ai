@@ -29,6 +29,10 @@ export const IPC = {
   openActivityLog: 'actions:open-log'
 } as const
 
+export interface AskOptions {
+  oneOff?: boolean
+}
+
 export interface ChatReply {
   emotion: Emotion
   text: string
@@ -55,9 +59,10 @@ export interface CompanionApi {
   /** Returns the default VRM model if one is in assets/characters, or null. */
   getInitialModel(): Promise<{ data: ArrayBuffer; name: string } | null>
   /** Sends a message to the character and returns its reply. */
-  chat(text: string): Promise<ChatReply>
+  /** oneOff: a single job (like translating copied text) that ignores and doesn't join the chat history. */
+  chat(text: string, opts?: AskOptions): Promise<ChatReply>
   /** For the built-in brain: the system prompt and history to send, including the new message. */
-  chatPrepare(text: string): Promise<{ system: string; history: { role: 'user' | 'assistant'; content: string }[] }>
+  chatPrepare(text: string, opts?: AskOptions): Promise<{ system: string; history: { role: 'user' | 'assistant'; content: string }[] }>
   /** For the built-in brain: saves the exchange to local history. */
   chatRecord(userText: string, reply: string): Promise<void>
   getSettings(): Promise<PublicSettings>

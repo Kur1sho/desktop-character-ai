@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
-import type { ChatReply } from '@shared/ipc'
+import type { AskOptions, ChatReply } from '@shared/ipc'
 import { getPersona, parseEmotion, type Emotion } from '@shared/personas'
 import { shortenReply } from '@shared/brevity'
 import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
@@ -72,16 +72,16 @@ function feel(e: Emotion): void {
 let settings: Settings = { ...DEFAULT_SETTINGS }
 
 /** Sends a message to whichever AI is chosen. The built-in brain runs right here. */
-async function ask(text: string): Promise<ChatReply> {
+async function ask(text: string, opts?: AskOptions): Promise<ChatReply> {
   if (!api) throw new Error('No app bridge')
-  if (settings.provider !== 'builtin') return api.chat(text)
-  const { system, history } = await api.chatPrepare(text)
+  if (settings.provider !== 'builtin') return api.chat(text, opts)
+  const { system, history } = await api.chatPrepare(text, opts)
   try {
     const raw = await think(modelFor(settings), [{ role: 'system', content: system }, ...history], (pct) =>
       chat.status(`Downloading my brain (one time only)… ${pct}%`)
     )
     const short = shortenReply(raw, text)
-    await api.chatRecord(text, short)
+    if (!opts?.oneOff) await api.chatRecord(text, short)
     return parseEmotion(short)
   } catch (err) {
     return { emotion: 'sad', text: err instanceof Error ? err.message : String(err), error: true }
