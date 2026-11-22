@@ -154,6 +154,9 @@ async function ensureEngine(): Promise<Hardware> {
       return ensureEngine()
     }
     unavailable = message
+    if (/application control|blocked this file/i.test(message)) {
+      logConversation('Brain: Windows Smart App Control blocked the llama.cpp engine files (they are not code-signed yet).')
+    }
     console.error('llama.cpp brain unavailable:', message)
     logConversation(`Brain: llama.cpp can't run on this PC (${message}). Using the in-window brain.`)
     throw err
