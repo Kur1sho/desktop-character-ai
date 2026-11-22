@@ -59,7 +59,7 @@ describe('parseEmotion with stray tags', () => {
 describe('Robotico personality', () => {
   it('gives him a reason to show every emotion, and no gushing', () => {
     const prompt = systemPrompt(getPersona('robotico'))
-    for (const e of ['love', 'flustered', 'smug', 'scared', 'sad', 'angry']) expect(prompt).toContain(`- ${e}`)
+    for (const e of ['love', 'flustered', 'smug', 'scared', 'sad', 'angry', 'laughing']) expect(prompt).toMatch(new RegExp(`- [a-z ]*\\b${e}\\b`))
     expect(prompt).toContain('use the whole range')
     expect(getPersona('robotico').resting).toBe('happy')
     expect(prompt).toContain('do NOT gush')
