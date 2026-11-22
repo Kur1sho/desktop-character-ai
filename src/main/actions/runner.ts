@@ -103,21 +103,45 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $A = [System.Windows.Automation.AutomationElement]
 $scope = [System.Windows.Automation.TreeScope]::Descendants
 $isButton = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+function Norm([string]$s) { (($s.ToLower() -replace '[^a-z0-9 ]', '') -replace 'ing\\b', 'in') -replace ' ', '' }
+# How well a button's name ("Play Faint by Linkin Park") matches what was asked for.
+function Score([string]$label, [string]$want) {
+  if (-not $want) { return 0 }
+  $full = Norm $label
+  $title = Norm ($label -replace ' by (?!.* by ).*$', '')
+  if ($full -eq $want -or $title -eq $want) { return 3 }
+  if ($title.StartsWith($want) -or ($title.Length -ge 3 -and $want.Contains($title))) { return 2 }
+  if ($full.Contains($want)) { return 1 }
+  return 0
+}
+$want = Norm $env:SPOTIFY_TARGET
 Start-Sleep -Milliseconds 1200
 $deadline = (Get-Date).AddSeconds(10)
 while ((Get-Date) -lt $deadline) {
   $p = Get-Process Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
   if ($p) {
     $root = $A::FromHandle($p.MainWindowHandle)
-    $top = $root.FindFirst($scope, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Top result')))
-    $area = if ($top) { $top } else { $root }
-    foreach ($b in $area.FindAll($scope, $isButton)) {
-      $n = $b.Current.Name
-      if ($n -like 'Play *' -and $b.Current.IsEnabled -and -not $b.Current.IsOffscreen) {
-        $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-        Write-Output $n.Substring(5)
-        exit 0
-      }
+    $buttons = @($root.FindAll($scope, $isButton) | Where-Object {
+      $_.Current.Name -like 'Play *' -and $_.Current.IsEnabled -and -not $_.Current.IsOffscreen
+    })
+    # Best match for the name wins (so "Play Faint" plays Faint, not the song listed above it);
+    # ties go to whichever is highest on screen.
+    $best = $null; $bestScore = 0; $bestY = [double]::MaxValue
+    foreach ($b in $buttons) {
+      $sc = Score $b.Current.Name.Substring(5) $want
+      $y = $b.Current.BoundingRectangle.Y
+      if ($sc -gt $bestScore -or ($sc -eq $bestScore -and $sc -gt 0 -and $y -lt $bestY)) { $best = $b; $bestScore = $sc; $bestY = $y }
+    }
+    if (-not $best) {
+      # Nothing matches by name: fall back to the top result.
+      $top = $root.FindFirst($scope, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Top result')))
+      $area = if ($top) { @($top.FindAll($scope, $isButton) | Where-Object { $_.Current.Name -like 'Play *' -and -not $_.Current.IsOffscreen }) } else { $buttons }
+      $best = $area | Select-Object -First 1
+    }
+    if ($best) {
+      $best.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+      Write-Output $best.Current.Name.Substring(5)
+      exit 0
     }
   }
   Start-Sleep -Milliseconds 400
@@ -197,7 +221,11 @@ async function playOnSpotify(query: string): Promise<ActionResult> {
   await showInSpotify(query)
   if (!isWindows) return { ok: true, message: `Opened "${query}" in Spotify.` }
   try {
-    const played = (await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PRESS_TOP_RESULT], 20000)).trim()
+    const played = (
+      await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PRESS_TOP_RESULT], 20000, {
+        SPOTIFY_TARGET: query
+      })
+    ).trim()
     return { ok: true, message: played ? `Playing ${played}.` : `Playing "${query}".` }
   } catch {
     return { ok: true, message: `I opened "${query}" in Spotify, but couldn't press play. Click the top result.` }
