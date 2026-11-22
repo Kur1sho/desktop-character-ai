@@ -124,3 +124,12 @@ describe('parseIntent with a misheard name', () => {
     expect(parseIntent('hey robotico how are you')).toBeNull()
   })
 })
+
+describe('Spotify playlists', () => {
+  it('understands playlist requests', () => {
+    expect(parseIntent('Play playlist Runnin In My Head')).toEqual({ type: 'spotify', query: 'Runnin In My Head', playlist: true })
+    expect(parseIntent('play my gym playlist')).toEqual({ type: 'spotify', query: 'Gym', playlist: true })
+    expect(parseIntent('play the playlist called chill vibes on spotify')).toEqual({ type: 'spotify', query: 'Chill Vibes', playlist: true })
+    expect(extractActions('Sure. <<spotify_playlist Road Trip>>').actions).toEqual([{ type: 'spotify', query: 'Road Trip', playlist: true }])
+  })
+})
