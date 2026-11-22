@@ -3,6 +3,7 @@ import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
 import { extractActions, parseIntent, wasRequested, type Action } from '@shared/actions'
 import { quickMath } from '@shared/quickMath'
+import { clipboardRequest, withCopiedText } from '@shared/clipboard'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -41,7 +42,9 @@ export function createChat(
   /** Runs actions: plain requests ("open Spotify") come from the user, tags in replies from the AI. */
   onActions: (actions: Action[], source: 'user' | 'ai', intro?: string) => Promise<void> = async () => {},
   /** Handles requests that never reach the AI (like "dance"). Returns true if it took care of it. */
-  onLocal: (text: string) => boolean = () => false
+  onLocal: (text: string) => boolean = () => false,
+  /** Reads what the user copied, only when they ask about it. */
+  readClipboard: () => Promise<string> = async () => ''
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -96,19 +99,39 @@ export function createChat(
     try {
       // Plain requests are handled straight away, without the AI.
       if (onLocal(text)) return
-      const intent = parseIntent(text)
+      // "Read / translate / explain what I copied": the clipboard is read only now, when asked.
+      const clip = clipboardRequest(text)
+      let copied = ''
+      if (clip) {
+        copied = (await readClipboard()).trim()
+        if (mine !== generation) return
+        if (!copied) {
+          show("There's nothing copied right now. Copy some text first!", 4000)
+          return
+        }
+        if (clip === 'read') {
+          const out = copied.length > 600 ? `${copied.slice(0, 600)}…` : copied
+          show(out, readingMs(out))
+          onReply(out)
+          return
+        }
+      }
+      const intent = clip ? null : parseIntent(text)
       if (intent) {
         await onActions([intent], 'user')
         return
       }
       thinking()
       // Sums are worked out exactly here; the AI just has to say it in character.
-      const sum = quickMath(text)
-      let reply = await askFn(sum ? `${text} (${sum.expression} = ${sum.answer}. Say the answer first.)` : text)
+      const sum = clip ? null : quickMath(text)
+      let reply = await askFn(
+        copied ? withCopiedText(text, copied) : sum ? `${text} (${sum.expression} = ${sum.answer}. Say the answer first.)` : text
+      )
       if (mine !== generation) return // interrupted while thinking
       let { text: said, actions: tagged } = extractActions(reply.text)
-      let actions = tagged.filter((a) => wasRequested(a, text))
-      if (tagged.length && !actions.length) {
+      // Nothing in copied text gets to run actions.
+      let actions = copied ? [] : tagged.filter((a) => wasRequested(a, text))
+      if (tagged.length && !actions.length && !copied) {
         // The AI tried to do something nobody asked for (small models copy the
         // example), so its words are about that too. Ask again for a plain chat reply.
         reply = await askFn(`${text} (Just chat. Don't do anything on the computer.)`)

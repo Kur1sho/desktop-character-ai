@@ -8,6 +8,8 @@ import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { bestAppMatch, describeAction, validateAction, type Action, type ActionResult } from '../../shared/actions'
+import { clearlyAGame, launchGame, startSteamGame, steamGames, systemAction, windowAction } from './desktop'
+import { pickGame } from '../../shared/desktopMatch'
 
 const isWindows = process.platform === 'win32'
 
@@ -65,7 +67,12 @@ async function openApp(name: string): Promise<ActionResult> {
   }
   if (!isWindows) return { ok: false, message: 'Opening apps only works on Windows for now.' }
   const found = bestAppMatch(name, await installedApps())
-  if (!found) return { ok: false, message: `I couldn't find an app called "${name}".` }
+  if (!found) {
+    // Not in the Start menu: maybe it's a Steam game.
+    const game = pickGame(name, await steamGames().catch(() => []))
+    if (game) return startSteamGame(game)
+    return { ok: false, message: `I couldn't find an app called "${name}".` }
+  }
   // The AppID comes from Windows' own list, never from what was said.
   await run('explorer.exe', [`shell:AppsFolder\\${found.appId}`], 5000).catch(() => undefined)
   return { ok: true, message: `Opened ${found.name}.` }
@@ -268,8 +275,21 @@ export async function runAction(raw: unknown, source: 'user' | 'ai'): Promise<Ac
         await shell.openExternal(`https://duckduckgo.com/?q=${encodeURIComponent(action.query)}`)
         result = { ok: true, message: `Searched for "${action.query}".` }
         break
-      case 'spotify':
-        result = action.playlist ? await playPlaylist(action.query) : await playOnSpotify(action.query)
+      case 'spotify': {
+        // "Play Minecraft" means the game, if it's installed.
+        const game = action.playlist ? null : await clearlyAGame(action.query)
+        if (game) result = await startSteamGame(game)
+        else result = action.playlist ? await playPlaylist(action.query) : await playOnSpotify(action.query)
+        break
+      }
+      case 'window':
+        result = await windowAction(action.op, action.app, openApp)
+        break
+      case 'game':
+        result = await launchGame(action.name, openApp)
+        break
+      case 'system':
+        result = await systemAction(action.op)
         break
       case 'media':
         await pressKey(action.key)

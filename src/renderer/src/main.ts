@@ -109,7 +109,8 @@ const chat = createChat(
     if (cmd === 'start') void startDancing()
     else stopDancing(true)
     return true
-  }
+  },
+  api ? () => api.readClipboard() : undefined
 )
 let speaking = false
 let thinking = false

@@ -23,6 +23,7 @@ export const IPC = {
   clearMemory: 'settings:clear-memory',
   openSettings: 'settings:open',
   runAction: 'actions:run',
+  readClipboard: 'actions:read-clipboard',
   openActivityLog: 'actions:open-log'
 } as const
 
@@ -65,6 +66,8 @@ export interface CompanionApi {
   openSettings(): void
   /** Runs an action the user has confirmed. The main process checks it again first. */
   runAction(action: Action, source: 'user' | 'ai'): Promise<ActionResult>
+  /** The text the user copied. Only called when they ask about it. */
+  readClipboard(): Promise<string>
   /** Opens the log of everything the character has done. */
   openActivityLog(): void
 }
