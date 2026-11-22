@@ -16,11 +16,41 @@ export const BRAIN_SMALL = 'onnx-community/gemma-3-1b-it-ONNX'
 /** Older defaults that people may have saved. They now mean "auto". */
 const OLD_DEFAULTS = new Set([BRAIN_SMALL])
 
-/** The models to try, best first. A later one is used only if an earlier one won't load. */
-export function brainCandidates(requested: string, hasGpu: boolean): string[] {
+export type BrainDevice = 'gpu' | 'cpu'
+export interface BrainChoice {
+  model: string
+  device: BrainDevice
+}
+
+/** A choice as one string, for remembering which ones didn't work on this PC. */
+export const choiceKey = (c: BrainChoice) => `${c.device}:${c.model}`
+
+/**
+ * The model and device pairs to try, best first. A later one is used only if an
+ * earlier one won't load (for example, integrated graphics without enough
+ * video memory). Pairs that already failed on this PC are skipped.
+ */
+export function brainCandidates(requested: string, hasGpu: boolean, failed: string[] = []): BrainChoice[] {
   const r = requested.trim()
-  if (r && r !== BRAIN_AUTO && !OLD_DEFAULTS.has(r)) return [r]
-  return hasGpu ? [BRAIN_LARGE, BRAIN_MEDIUM] : [BRAIN_MEDIUM, BRAIN_SMALL]
+  const custom = r && r !== BRAIN_AUTO && !OLD_DEFAULTS.has(r)
+  const list: BrainChoice[] = custom
+    ? [
+        ...(hasGpu ? [{ model: r, device: 'gpu' as const }] : []),
+        { model: r, device: 'cpu' }
+      ]
+    : [
+        ...(hasGpu
+          ? [
+              { model: BRAIN_LARGE, device: 'gpu' as const },
+              { model: BRAIN_MEDIUM, device: 'gpu' as const }
+            ]
+          : []),
+        { model: BRAIN_MEDIUM, device: 'cpu' },
+        { model: BRAIN_SMALL, device: 'cpu' }
+      ]
+  const left = list.filter((c) => !failed.includes(choiceKey(c)))
+  // If everything failed before, try the safest one again rather than nothing.
+  return left.length ? left : list.slice(-1)
 }
 
 /** Qwen3 "thinks out loud" by default. We switch that off: it's slow and the user can't see it. */

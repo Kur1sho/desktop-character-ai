@@ -2,14 +2,30 @@
 // WebGPU when available, otherwise CPU). Downloaded once, then offline.
 // "auto" picks the smartest model the PC can run, and steps down if it won't load.
 import { pipeline, type TextGenerationPipeline } from '@huggingface/transformers'
-import { brainCandidates, isNetworkError, isThinkingModel, stripThinking } from '@shared/brainModels'
+import {
+  brainCandidates,
+  choiceKey,
+  isNetworkError,
+  isThinkingModel,
+  stripThinking,
+  type BrainChoice
+} from '@shared/brainModels'
 
 type InMsg =
-  | { type: 'load'; model: string }
-  | { type: 'generate'; id: number; model: string; maxTokens?: number; messages: { role: string; content: string }[] }
+  | { type: 'load'; model: string; failed?: string[] }
+  | {
+      type: 'generate'
+      id: number
+      model: string
+      failed?: string[]
+      maxTokens?: number
+      messages: { role: string; content: string }[]
+    }
 type OutMsg =
   | { type: 'progress'; percent: number }
   | { type: 'ready'; device: string; model: string }
+  /** This model and device didn't work on this PC, so don't try it next time. */
+  | { type: 'failed'; key: string }
   | { type: 'result'; id: number; text: string }
   | { type: 'error'; id?: number; message: string }
 
@@ -31,7 +47,31 @@ async function hasWebGpu(): Promise<boolean> {
   }
 }
 
-async function loadOne(model: string, gpu: boolean): Promise<TextGenerationPipeline> {
+/**
+ * GPU memory errors can surface outside the promise we're awaiting (inside the
+ * WebGPU runtime). Catch those too while a model loads, so we can step down.
+ */
+function withStrayErrors<T>(work: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      e.preventDefault()
+      reject(e.reason instanceof Error ? e.reason : new Error(String(e.reason)))
+    }
+    const onError = (e: ErrorEvent) => {
+      e.preventDefault()
+      reject(e.error instanceof Error ? e.error : new Error(e.message))
+    }
+    self.addEventListener('unhandledrejection', onRejection)
+    self.addEventListener('error', onError)
+    work.then(resolve, reject).finally(() => {
+      self.removeEventListener('unhandledrejection', onRejection)
+      self.removeEventListener('error', onError)
+    })
+  })
+}
+
+async function loadOne({ model, device }: BrainChoice): Promise<TextGenerationPipeline> {
+  const gpu = device === 'gpu'
   const files = new Map<string, number>()
   const gen = (await pipeline('text-generation', model, {
     device: gpu ? 'webgpu' : 'wasm',
@@ -58,24 +98,25 @@ function templateOpts(model: string): Record<string, unknown> {
   return isThinkingModel(model) ? { tokenizer_encode_kwargs: { enable_thinking: false } } : {}
 }
 
-function load(model: string): Promise<Loaded> {
+function load(model: string, failed: string[] = []): Promise<Loaded> {
   if (loading && requestedModel === model) return loading
   requestedModel = model
   loading = (async () => {
     const gpu = await hasWebGpu()
-    const candidates = brainCandidates(model, gpu)
+    const candidates = brainCandidates(model, gpu, failed)
     let lastErr: unknown = null
-    for (const m of candidates) {
+    for (const choice of candidates) {
       try {
-        const gen = await loadOne(m, gpu)
-        post({ type: 'ready', device: gpu ? 'gpu' : 'cpu', model: m })
-        return { gen, model: m }
+        const gen = await withStrayErrors(loadOne(choice))
+        post({ type: 'ready', device: choice.device, model: choice.model })
+        return { gen, model: choice.model }
       } catch (err) {
         lastErr = err
         const message = err instanceof Error ? err.message : String(err)
-        console.warn(`Brain ${m} didn't load, trying a smaller one:`, message)
-        // No internet: a smaller model won't download either.
+        // No internet: a smaller model won't download either, and this one may work later.
         if (isNetworkError(message)) break
+        console.warn(`Brain ${choiceKey(choice)} didn't load, stepping down:`, message)
+        post({ type: 'failed', key: choiceKey(choice) })
       }
     }
     throw lastErr ?? new Error('No brain could be loaded.')
@@ -90,11 +131,11 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   const msg = e.data
   try {
     if (msg.type === 'load') {
-      const { model } = await load(msg.model)
+      const { model } = await load(msg.model, msg.failed)
       post({ type: 'ready', device: '', model })
       return
     }
-    const { gen, model } = await load(msg.model)
+    const { gen, model } = await load(msg.model, msg.failed)
     const out = (await gen(msg.messages as never, {
       max_new_tokens: msg.maxTokens ?? 100,
       do_sample: true,

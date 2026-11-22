@@ -6,12 +6,32 @@ const loads: { resolve: () => void; reject: (e: Error) => void }[] = []
 const pending = new Map<number, { resolve: (t: string) => void; reject: (e: Error) => void }>()
 let progressCb: ((percent: number) => void) | null = null
 
+// Brains that didn't fit on this PC (e.g. too big for integrated graphics), so
+// they aren't downloaded and tried again on every start.
+const FAILED_KEY = 'brain.failed.v1'
+function failedBrains(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FAILED_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+function rememberFailed(key: string): void {
+  try {
+    localStorage.setItem(FAILED_KEY, JSON.stringify([...new Set([...failedBrains(), key])]))
+  } catch {
+    /* storage unavailable: we'll just try again next time */
+  }
+}
+
 function getWorker(): Worker {
   if (worker) return worker
   worker = new Worker(new URL('./brainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (e) => {
     const m = e.data
     if (m.type === 'progress') progressCb?.(m.percent)
+    else if (m.type === 'failed') rememberFailed(m.key)
     else if (m.type === 'result') pending.get(m.id)?.resolve(m.text)
     else if (m.type === 'ready') loads.splice(0).forEach((l) => l.resolve())
     else if (m.type === 'error') {
@@ -31,7 +51,7 @@ export function warmUp(model: string, onProgress?: (percent: number) => void): P
   if (onProgress) progressCb = onProgress
   return new Promise((resolve, reject) => {
     loads.push({ resolve, reject })
-    getWorker().postMessage({ type: 'load', model })
+    getWorker().postMessage({ type: 'load', model, failed: failedBrains() })
   })
 }
 
@@ -45,7 +65,7 @@ export function think(
   const id = nextId++
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject })
-    getWorker().postMessage({ type: 'generate', id, model, maxTokens, messages })
+    getWorker().postMessage({ type: 'generate', id, model, failed: failedBrains(), maxTokens, messages })
   })
 }
 
