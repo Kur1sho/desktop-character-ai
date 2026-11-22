@@ -38,7 +38,7 @@ describe('personas', () => {
 
 describe('settings', () => {
   it('uses the provider default model when none is set', () => {
-    expect(modelFor(DEFAULT_SETTINGS)).toBe('onnx-community/gemma-3-1b-it-ONNX')
+    expect(modelFor(DEFAULT_SETTINGS)).toBe('auto')
     expect(modelFor({ ...DEFAULT_SETTINGS, provider: 'ollama' })).toBe('gemma3:4b')
     expect(modelFor({ ...DEFAULT_SETTINGS, provider: 'anthropic' })).toBe('claude-opus-5-5')
   })

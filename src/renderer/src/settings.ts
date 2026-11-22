@@ -41,7 +41,7 @@ function render(): void {
   provider.value = current.provider
   const info = PROVIDERS.find((p) => p.id === current.provider)!
   model.value = current.models[current.provider] ?? ''
-  model.placeholder = info.defaultModel
+  model.placeholder = info.defaultModel === 'auto' ? 'auto (best for your PC)' : info.defaultModel
   modelHint.textContent = info.modelHint
   ollamaBox.style.display = current.provider === 'ollama' ? '' : 'none'
   ollamaUrl.value = current.ollamaUrl
