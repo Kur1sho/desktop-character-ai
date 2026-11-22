@@ -1,0 +1,255 @@
+// Robotico's eyes: a local vision brain (Qwen3-VL, Apache-2.0) that looks at the
+// screen when the user asks. It runs in llama.cpp's own server program
+// (llama-server, MIT), downloaded once like the brain, and only listens on this PC
+// (127.0.0.1). It starts when needed and stops after a few idle minutes so it
+// doesn't hold on to memory. Screenshots are kept in memory only, never saved.
+import { app, desktopCapturer, screen } from 'electron'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { hasDedicatedGpu } from '../../shared/brainPick'
+import { logConversation } from '../conversationLog'
+import { nativeBrainAvailable, nativeHardware } from './nativeBrain'
+
+/** Vision brains to try, best first. llama-server fetches the model and its image reader together. */
+const VISION_MODELS = ['Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M', 'ggml-org/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M']
+const IDLE_MS = 3 * 60 * 1000
+/** Screenshots are shrunk to this width: plenty to read text, and quick to process. */
+const SHOT_WIDTH = 1280
+
+export type VisionStatus = (text: string) => void
+
+let server: { proc: ChildProcess; port: number; gpu: boolean } | null = null
+let starting: Promise<{ port: number }> | null = null
+let idleTimer: NodeJS.Timeout | null = null
+
+function baseDir(): string {
+  const local = process.env['LOCALAPPDATA']
+  return local ? join(local, 'Desktop Companion') : app.getPath('userData')
+}
+
+function findFile(dir: string, name: string): string | null {
+  if (!existsSync(dir)) return null
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry)
+    if (entry.toLowerCase() === name) return p
+    if (statSync(p).isDirectory()) {
+      const found = findFile(p, name)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/** Which llama.cpp release download suits this PC. */
+function assetPattern(): RegExp {
+  if (process.platform === 'win32') return process.arch === 'arm64' ? /bin-win-cpu-arm64\.zip$/ : /bin-win-vulkan-x64\.zip$/
+  if (process.platform === 'darwin') return process.arch === 'arm64' ? /bin-macos-arm64\.(?:zip|tar\.gz)$/ : /bin-macos-x64\.(?:zip|tar\.gz)$/
+  return /bin-ubuntu-(?:vulkan-)?x64\.(?:zip|tar\.gz)$/
+}
+
+function unpack(archive: string, dir: string): Promise<void> {
+  // Windows 10+ ships bsdtar, which opens zip files. Elsewhere use unzip/tar.
+  const [cmd, args] =
+    process.platform === 'win32' || archive.endsWith('.tar.gz')
+      ? ['tar', ['-xf', archive, '-C', dir]]
+      : ['unzip', ['-q', '-o', archive, '-d', dir]]
+  return new Promise((resolve, reject) =>
+    execFile(cmd, args, { windowsHide: true }, (err) => (err ? reject(err) : resolve()))
+  )
+}
+
+/** Downloads llama-server once (from llama.cpp's official GitHub releases) and returns its path. */
+async function ensureServerProgram(status: VisionStatus): Promise<string> {
+  const dir = join(baseDir(), 'llama-server')
+  const exe = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'
+  const existing = findFile(dir, exe)
+  if (existing) return existing
+
+  status('Getting my eyes ready (one time only)…')
+  const res = await fetch('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest', {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'desktop-companion' }
+  })
+  if (!res.ok) throw new Error(`Couldn't find the vision engine download (HTTP ${res.status}).`)
+  const release = (await res.json()) as { tag_name: string; assets: { name: string; browser_download_url: string; size: number }[] }
+  const asset = release.assets.find((a) => assetPattern().test(a.name))
+  if (!asset) throw new Error('No vision engine download for this PC.')
+
+  mkdirSync(dir, { recursive: true })
+  const archive = join(dir, asset.name)
+  const dl = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'desktop-companion' } })
+  if (!dl.ok || !dl.body) throw new Error(`Couldn't download the vision engine (HTTP ${dl.status}).`)
+  let got = 0
+  let lastPct = -1
+  const counter = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, ctl) {
+      got += chunk.byteLength
+      const pct = asset.size ? Math.floor((got / asset.size) * 100) : 0
+      if (pct !== lastPct) status(`Getting my eyes ready (one time only)… ${(lastPct = pct)}%`)
+      ctl.enqueue(chunk)
+    }
+  })
+  await pipeline(Readable.fromWeb(dl.body.pipeThrough(counter) as never), createWriteStream(archive))
+  await unpack(archive, join(dir, release.tag_name))
+  rmSync(archive, { force: true })
+  const found = findFile(dir, exe)
+  if (!found) throw new Error('The vision engine download was missing llama-server.')
+  logConversation(`Vision: installed llama.cpp ${release.tag_name}`)
+  return found
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = createServer()
+    s.once('error', reject)
+    s.listen(0, '127.0.0.1', () => {
+      const port = (s.address() as { port: number }).port
+      s.close(() => resolve(port))
+    })
+  })
+}
+
+async function healthy(port: number): Promise<boolean> {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/health`)).ok
+  } catch {
+    return false
+  }
+}
+
+/** Starts llama-server with a vision model, waiting while it downloads (first time) and loads. */
+function startServer(program: string, model: string, gpu: boolean, status: VisionStatus): Promise<{ proc: ChildProcess; port: number }> {
+  return freePort().then(
+    (port) =>
+      new Promise((resolve, reject) => {
+        const cache = join(baseDir(), 'models', 'vision')
+        mkdirSync(cache, { recursive: true })
+        const args = ['-hf', model, '--host', '127.0.0.1', '--port', String(port), '-c', '8192', '-ngl', gpu ? '99' : '0', '--no-webui']
+        const proc = spawn(program, args, { windowsHide: true, env: { ...process.env, LLAMA_CACHE: cache } })
+        let tail = ''
+        let done = false
+        const finish = (err?: Error) => {
+          if (done) return
+          done = true
+          clearInterval(poll)
+          if (err) {
+            proc.kill()
+            reject(err)
+          } else resolve({ proc, port })
+        }
+        const onOutput = (d: Buffer) => {
+          const text = String(d)
+          tail = (tail + text).slice(-2000)
+          // Download progress, e.g. "  45%" from llama.cpp's downloader.
+          const pct = text.match(/(\d{1,3})(?:\.\d+)?%/g)?.at(-1)
+          if (pct) status(`Downloading my eyes (one time only)… ${parseInt(pct, 10)}%`)
+        }
+        proc.stdout?.on('data', onOutput)
+        proc.stderr?.on('data', onOutput)
+        proc.on('error', (err) => finish(err))
+        proc.on('exit', (code) => finish(new Error(`The vision engine stopped (code ${code}). ${tail.split('\n').slice(-4).join(' ').trim()}`)))
+        const started = Date.now()
+        const poll = setInterval(async () => {
+          if (await healthy(port)) finish()
+          // The first download can take a while; loading alone shouldn't.
+          else if (Date.now() - started > 45 * 60 * 1000) finish(new Error('The vision engine took too long to start.'))
+        }, 700)
+      })
+  )
+}
+
+async function ensureServer(status: VisionStatus): Promise<{ port: number }> {
+  if (server && server.proc.exitCode === null) return server
+  if (!starting) {
+    starting = (async () => {
+      const program = await ensureServerProgram(status)
+      // The brain engine knows the graphics card; start it if needed (it's cheap).
+      await nativeBrainAvailable()
+      const hw = nativeHardware()
+      const gpuFirst = hw ? hasDedicatedGpu(hw) : false
+      let lastErr: unknown = null
+      for (const model of VISION_MODELS) {
+        // On a graphics card first; if that won't load (not enough video memory), the processor.
+        for (const gpu of gpuFirst ? [true, false] : [false]) {
+          try {
+            status('Opening my eyes…')
+            const s = await startServer(program, model, gpu, status)
+            server = { ...s, gpu }
+            s.proc.on('exit', () => {
+              if (server?.proc === s.proc) server = null
+            })
+            logConversation(`Vision: ${model} on the ${gpu ? 'graphics card' : 'processor'}`)
+            return s
+          } catch (err) {
+            lastErr = err
+            logConversation(`Vision: ${model} (${gpu ? 'graphics card' : 'processor'}) didn't start: ${err instanceof Error ? err.message : err}`)
+          }
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error("My eyes wouldn't open.")
+    })().finally(() => (starting = null))
+  }
+  return starting
+}
+
+function scheduleIdleStop(): void {
+  if (idleTimer) clearTimeout(idleTimer)
+  // Frees the memory (and video memory) when he hasn't looked at anything for a while.
+  idleTimer = setTimeout(() => stopVision(), IDLE_MS)
+}
+
+export function stopVision(): void {
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = null
+  server?.proc.kill()
+  server = null
+}
+
+/** Takes a picture of the screen the mouse is on, shrunk, as a JPEG data URL. Never written to disk. */
+export async function captureScreen(): Promise<string> {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const width = Math.min(SHOT_WIDTH, Math.round(display.size.width * display.scaleFactor))
+  const height = Math.round((width * display.size.height) / display.size.width)
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } })
+  const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0]
+  if (!source || source.thumbnail.isEmpty()) throw new Error("I couldn't see the screen.")
+  return `data:image/jpeg;base64,${source.thumbnail.toJPEG(82).toString('base64')}`
+}
+
+/** Asks the vision brain about a picture. */
+export async function lookAndAnswer(
+  system: string,
+  question: string,
+  image: string,
+  maxTokens: number,
+  status: VisionStatus
+): Promise<string> {
+  const { port } = await ensureServer(status)
+  status('Looking…')
+  const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: image } },
+            { type: 'text', text: question }
+          ]
+        }
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.7,
+      top_p: 0.8
+    })
+  })
+  scheduleIdleStop()
+  if (!res.ok) throw new Error(`My eyes had a problem (HTTP ${res.status}).`)
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+  return data.choices?.[0]?.message?.content?.trim() ?? ''
+}

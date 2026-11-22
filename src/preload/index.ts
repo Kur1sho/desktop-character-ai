@@ -25,7 +25,9 @@ const api: CompanionApi = {
   openConversationLog: () => ipcRenderer.send(IPC.openConversationLog),
   openActivityLog: () => ipcRenderer.send(IPC.openActivityLog),
   brainWarmUp: () => ipcRenderer.invoke(IPC.brainWarmUp),
-  onBrainProgress: (cb) => ipcRenderer.on(IPC.brainProgress, (_e, pct) => cb(pct))
+  onBrainProgress: (cb) => ipcRenderer.on(IPC.brainProgress, (_e, pct) => cb(pct)),
+  lookAtScreen: (text) => ipcRenderer.invoke(IPC.lookAtScreen, text),
+  onVisionStatus: (cb) => ipcRenderer.on(IPC.visionStatus, (_e, text) => cb(text))
 }
 
 contextBridge.exposeInMainWorld('companion', api)

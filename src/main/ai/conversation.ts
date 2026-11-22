@@ -13,6 +13,9 @@ import { openaiCompatibleChat } from './openaiCompatible'
 import type { ChatTurn } from './types'
 import { maxTokensFor, stripThinking } from '../../shared/brainModels'
 import { nativeChat } from '../brain/nativeBrain'
+import { captureScreen, lookAndAnswer, type VisionStatus } from '../brain/vision'
+import { extractActions } from '../../shared/actions'
+import { SCREEN_MAX_TOKENS } from '../../shared/screen'
 import type { ChatReply } from '../../shared/ipc'
 
 const MAX_TURNS = 30
@@ -90,6 +93,36 @@ export async function chat(userText: string, oneOff = false): Promise<ChatReply>
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('Chat failed:', message)
+    return { emotion: 'sad', text: message, error: true }
+  }
+}
+
+const SEEING_RULES = `
+You can see the user's screen: it's in the picture with their message. Answer about what's actually on it.
+Read any text that matters (errors, settings, game hints) and be specific. If you can't make something out, say so.
+Don't use action tags here.`
+
+/**
+ * Looks at the screen and answers a question about it, in character. The
+ * screenshot is only kept in memory for this one question.
+ */
+export async function lookAtScreen(userText: string, status: VisionStatus): Promise<ChatReply> {
+  const persona = getPersona(getSettings().personaId)
+  try {
+    const image = await captureScreen()
+    const raw = await lookAndAnswer(systemPrompt(persona) + SEEING_RULES, userText, image, SCREEN_MAX_TOKENS, status)
+    // Nothing the vision brain says gets to run actions.
+    const said = extractActions(stripThinking(raw)).text
+    const short = shortenReply(said, userText, true)
+    saveHistory(persona.id, [
+      ...loadHistory(persona.id),
+      { role: 'user', content: `${userText} (you looked at my screen)` },
+      { role: 'assistant', content: short }
+    ])
+    return parseEmotion(short)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('Looking failed:', message)
     return { emotion: 'sad', text: message, error: true }
   }
 }

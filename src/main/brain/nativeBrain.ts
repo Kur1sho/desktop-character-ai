@@ -292,3 +292,8 @@ export function stopNativeBrain(): void {
 }
 
 export const KNOWN_BRAINS = GGUF_BRAINS
+
+/** The hardware llama.cpp found (null until the brain engine has started). */
+export function nativeHardware(): Hardware | null {
+  return hw
+}

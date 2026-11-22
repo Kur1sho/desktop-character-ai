@@ -14,7 +14,7 @@ export function wantsDetail(userText: string): boolean {
  * Trims a raw reply ("[happy] Sentence. Sentence. <<tag>>") to a couple of
  * sentences, keeping the emotion tag at the front and any action tags at the end.
  */
-export function shortenReply(raw: string, userText: string): string {
+export function shortenReply(raw: string, userText: string, detailWanted = false): string {
   const actions = raw.match(/<<[^<>]*>>/g) ?? []
   let body = raw.replace(/<<[^<>]*>>/g, ' ')
   const lead = body.match(/^\s*\[\s*[a-zA-Z]+\s*\]/)?.[0]?.trim() ?? ''
@@ -23,7 +23,7 @@ export function shortenReply(raw: string, userText: string): string {
 
   // Working on copied text (translating, summarising) needs room.
   const copied = userText.includes(COPIED_MARKER)
-  const detail = wantsDetail(userText)
+  const detail = detailWanted || wantsDetail(userText)
   const maxSentences = copied ? 8 : detail ? 4 : 2
   const maxChars = copied ? 900 : detail ? 420 : 180
   const sentences = body.match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [body]

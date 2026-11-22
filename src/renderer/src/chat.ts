@@ -4,6 +4,7 @@ import type { Emotion } from '@shared/personas'
 import { describeAction, extractActions, parseIntents, wasRequested, type Action } from '@shared/actions'
 import { quickMath } from '@shared/quickMath'
 import { clipboardRequest, withCopiedText } from '@shared/clipboard'
+import { screenRequest } from '@shared/screen'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -46,7 +47,9 @@ export function createChat(
   /** Reads what the user copied, only when they ask about it. */
   readClipboard: () => Promise<string> = async () => '',
   /** Writes a line to the conversation log (what was heard and decided). */
-  log: (line: string) => void = () => {}
+  log: (line: string) => void = () => {},
+  /** Looks at the screen and answers about it. Only called when the user asks about the screen. */
+  lookAtScreen: ((text: string) => Promise<ChatReply>) | null = null
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -122,6 +125,16 @@ export function createChat(
           onReply(out)
           return
         }
+      }
+      if (!clip && lookAtScreen && screenRequest(text)) {
+        thinking()
+        const seen = await lookAtScreen(text)
+        if (mine !== generation) return
+        log(`  Looked and replied: ${seen.text}`)
+        onEmotion(seen.emotion)
+        show(seen.text || '…', readingMs(seen.text), Boolean(seen.error))
+        if (!seen.error && seen.text) onReply(seen.text)
+        return
       }
       const intents = clip ? null : parseIntents(text)
       if (intents) {
