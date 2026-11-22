@@ -82,3 +82,27 @@ export function isNetworkError(message: string): boolean {
 export function isGpuError(message: string): boolean {
   return /webgpu|GPUBuffer|GPUDevice|mapAsync|device (was )?lost|external Instance|OrtRun/i.test(message)
 }
+
+export interface GpuInfo {
+  vendor?: string
+  architecture?: string
+  description?: string
+  isFallbackAdapter?: boolean
+}
+
+/**
+ * Graphics that share the PC's memory (Intel UHD/Iris/Xe laptop chips) or a
+ * software fallback. Running a brain on them can crash the whole graphics
+ * process, so the processor is used instead. Intel Arc cards are dedicated
+ * (their architecture names end in "hpg"), so they still use the GPU.
+ */
+export function isWeakGpu(info: GpuInfo): boolean {
+  if (info.isFallbackAdapter) return true
+  const vendor = (info.vendor ?? '').toLowerCase()
+  const name = `${info.architecture ?? ''} ${info.description ?? ''}`.toLowerCase()
+  if (/swiftshader|basic render|microsoft basic|llvmpipe/.test(name)) return true
+  return vendor.includes('intel') && !/hpg|\barc\b/.test(name)
+}
+
+/** Unfinished attempts before a GPU brain counts as having crashed this PC. */
+export const CRASHES_BEFORE_SKIP = 2

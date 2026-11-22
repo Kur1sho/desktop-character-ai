@@ -1,5 +1,5 @@
 // Talks to the built-in brain worker.
-import { isGpuError } from '@shared/brainModels'
+import { CRASHES_BEFORE_SKIP, isGpuError } from '@shared/brainModels'
 
 let worker: Worker | null = null
 let nextId = 1
@@ -25,6 +25,38 @@ function failedBrains(): string[] {
     return []
   }
 }
+// A GPU brain can crash the whole graphics process, so the app can't report it.
+// We note each attempt first; one that never finished, twice, counts as failed.
+const TRYING_KEY = 'brain.trying.v1'
+function noteTrying(key: string): void {
+  try {
+    const prev = JSON.parse(localStorage.getItem(TRYING_KEY) ?? 'null') as { key?: string; count?: number } | null
+    const count = prev?.key === key ? (prev.count ?? 0) + 1 : 1
+    localStorage.setItem(TRYING_KEY, JSON.stringify({ key, count }))
+  } catch {
+    /* storage unavailable */
+  }
+}
+function clearTrying(): void {
+  try {
+    localStorage.removeItem(TRYING_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+}
+/** On start: a GPU brain that keeps dying before it's ready goes on the skip list. */
+function checkLastAttempt(): void {
+  try {
+    const prev = JSON.parse(localStorage.getItem(TRYING_KEY) ?? 'null') as { key?: string; count?: number } | null
+    if (prev?.key && (prev.count ?? 0) >= CRASHES_BEFORE_SKIP) {
+      rememberFailed(prev.key)
+      clearTrying()
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 function rememberFailed(key: string): void {
   try {
     localStorage.setItem(FAILED_KEY, JSON.stringify([...new Set([...failedBrains(), key])]))
@@ -35,11 +67,16 @@ function rememberFailed(key: string): void {
 
 function getWorker(): Worker {
   if (worker) return worker
+  checkLastAttempt()
   worker = new Worker(new URL('./brainWorker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (e) => {
     const m = e.data
     if (m.type === 'progress') progressCb?.(m.percent)
-    else if (m.type === 'failed') rememberFailed(m.key)
+    else if (m.type === 'trying') noteTrying(m.key)
+    else if (m.type === 'failed') {
+      rememberFailed(m.key)
+      clearTrying()
+    }
     else if (m.type === 'restart') {
       // The graphics chip crashed mid-reply. A new worker steps down to the next
       // brain (it skips the one that just failed) and answers the same message.
@@ -51,7 +88,10 @@ function getWorker(): Worker {
       } else p?.reject(new Error(friendly(m.message)))
       return
     } else if (m.type === 'result') pending.get(m.id)?.resolve(m.text)
-    else if (m.type === 'ready') loads.splice(0).forEach((l) => l.resolve())
+    else if (m.type === 'ready') {
+      clearTrying()
+      loads.splice(0).forEach((l) => l.resolve())
+    }
     else if (m.type === 'error') {
       if (m.id) pending.get(m.id)?.reject(new Error(friendly(m.message)))
       else {
