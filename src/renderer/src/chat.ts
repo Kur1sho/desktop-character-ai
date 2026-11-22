@@ -3,7 +3,8 @@ import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
 import { extractActions, parseIntent, type Action } from '@shared/actions'
 
-export type Choice = 'allow' | 'always' | 'cancel'
+/** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
+export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
 
 export interface ChatUi {
   /** Element that should catch the mouse while visible. */
@@ -20,6 +21,8 @@ export interface ChatUi {
   ask(text: string): Promise<void>
   /** Asks the user to OK an action, with buttons. `answer` settles it from elsewhere (a spoken "yes"). */
   confirm(question: string, canAlways: boolean): { choice: Promise<Choice>; answer(c: Choice): void }
+  /** Drops whatever is in progress (a reply on its way, an open question), e.g. when "Hey <name>" interrupts. */
+  cancel(): void
 }
 
 /** Roughly how long to keep a reply on screen: 2.5s plus reading time. */
@@ -40,13 +43,19 @@ export function createChat(
   const input = document.getElementById('input') as HTMLInputElement
   let hideTimer = 0
   let busy = false
+  /** Bumped to drop replies that arrive after being interrupted. */
+  let generation = 0
+  /** An open Yes/No question. Other messages show briefly, then it comes back. */
+  let pending: { node: Node; answer: (c: Choice) => void } | null = null
 
   function show(content: string | Node, ms: number | null, error = false): void {
     window.clearTimeout(hideTimer)
     bubble.replaceChildren(content)
     bubble.classList.toggle('error', error)
     bubble.classList.add('show')
-    if (ms !== null) hideTimer = window.setTimeout(hide, ms)
+    if (ms !== null) {
+      hideTimer = window.setTimeout(() => (pending ? show(pending.node, null) : hide()), ms)
+    }
   }
 
   function hide(): void {
@@ -73,6 +82,7 @@ export function createChat(
     }
     if (busy) return
     busy = true
+    const mine = ++generation
     try {
       // Plain requests are handled straight away, without the AI.
       const intent = parseIntent(text)
@@ -82,6 +92,7 @@ export function createChat(
       }
       thinking()
       const reply = await askFn(text)
+      if (mine !== generation) return // interrupted while thinking
       const { text: said, actions } = extractActions(reply.text)
       onEmotion(reply.emotion)
       if (!reply.error && actions.length) {
@@ -92,9 +103,9 @@ export function createChat(
       show(said || '…', readingMs(said), Boolean(reply.error))
       if (!reply.error && said) onReply(said)
     } catch (err) {
-      show(String(err), 6000, true)
+      if (mine === generation) show(String(err), 6000, true)
     } finally {
-      busy = false
+      if (mine === generation) busy = false
     }
   }
 
@@ -141,6 +152,7 @@ export function createChat(
         answer = (c) => {
           if (settled) return
           settled = true
+          if (pending?.node === box) pending = null
           resolve(c)
         }
         const button = (label: string, c: Choice, cls: string) => {
@@ -154,11 +166,18 @@ export function createChat(
         if (canAlways) button('Always', 'always', 'always')
         button('No', 'cancel', 'no')
         box.append(q, row)
+        pending?.answer('dismissed')
+        pending = { node: box, answer }
         show(box, null)
         // Nothing runs without an answer: no answer in 30 seconds means no.
         window.setTimeout(() => answer('cancel'), 30000)
       })
       return { choice, answer: (c) => answer(c) }
+    },
+    cancel() {
+      generation++
+      busy = false
+      pending?.answer('dismissed')
     }
   }
 }

@@ -48,3 +48,10 @@ describe('settings', () => {
     )
   })
 })
+
+describe('parseEmotion with stray tags', () => {
+  it('reads a tag at the end and maps made-up emotions', () => {
+    expect(parseEmotion('Query unresponsive. [Distressed]')).toEqual({ emotion: 'sad', text: 'Query unresponsive.' })
+    expect(parseEmotion('[happy] Hi! [smug]')).toEqual({ emotion: 'happy', text: 'Hi!' })
+  })
+})

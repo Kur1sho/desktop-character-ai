@@ -5,6 +5,7 @@ import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
 import { activityLogPath, runAction } from './actions/runner'
+import { connectSpotify, disconnectSpotify } from './spotify'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
@@ -177,6 +178,12 @@ ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => 
 ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
+ipcMain.handle(IPC.spotifyConnect, async (_e, clientId: unknown) => {
+  const id = String(clientId ?? '').trim()
+  saveSettings({ ...getSettings(), spotifyClientId: id })
+  await connectSpotify(id)
+})
+ipcMain.handle(IPC.spotifyDisconnect, () => disconnectSpotify())
 
 /** Opens the plain-text log of every action, so the user can see exactly what happened. */
 function openActivityLog(): void {

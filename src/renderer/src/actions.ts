@@ -69,11 +69,12 @@ export function createActions(deps: ActionDeps) {
     const persona = deps.persona()
     const settings = deps.settings()
     const canAlways = CAN_ALWAYS_ALLOW.has(action.type)
-    const preApproved = canAlways && settings.alwaysAllow.includes(action.type)
+    const preApproved = canAlways && (settings.autoApprove || settings.alwaysAllow.includes(action.type))
     if (!preApproved) {
       deps.setEmotion('neutral')
       const question = fill(persona.lines.confirm, { action: describeAction(action) })
       const choice = await ask(intro ? `${intro}\n${question}` : question, canAlways)
+      if (choice === 'dismissed') return
       if (choice === 'cancel') {
         deps.setEmotion('neutral')
         deps.chat.say(persona.lines.cancelled)
