@@ -11,6 +11,7 @@ import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
+import { describeCancelled, describeList, pickToCancel } from '@shared/reminders'
 import { listenToMusic, type MusicListener } from './dance/music'
 import { approachAngle, Choreographer, MoodTracker, type Mood, type Pose } from './dance/choreo'
 import { parseDanceCommand } from '@shared/actions'
@@ -147,7 +148,16 @@ const chat = createChat(
   },
   api ? () => api.readClipboard() : undefined,
   (line) => api?.logConversation(line),
-  api ? (text) => api.lookAtScreen(text) : null
+  api ? (text) => api.lookAtScreen(text) : null,
+  api
+    ? async (q) => {
+        const list = await api.listReminders()
+        const now = new Date()
+        if (q.op === 'list') return describeList(list, q.kind, now)
+        const gone = await api.cancelReminders(pickToCancel(list, q).map((r) => r.id))
+        return describeCancelled(gone, q.kind, now)
+      }
+    : null
 )
 // "Downloading my eyes… 40%", "Looking…"
 api?.onVisionStatus((text) => chat.status(text))
@@ -183,6 +193,8 @@ const actions = api
       spokenRequest: () => spokenRequest
     })
   : null
+// Timers, reminders and alarms are kept by the main process; it tells us when one is due.
+api?.onReminderDue((r, late) => actions?.due(r, late))
 
 async function refreshSettings(): Promise<void> {
   if (!api) return

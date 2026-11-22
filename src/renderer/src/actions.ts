@@ -1,13 +1,7 @@
 // Asks before every action, then runs it. The user can answer with the
 // buttons in the speech bubble or, if they asked by voice, by saying yes or no.
-import {
-  canAlwaysAllow,
-  describeAction,
-  formatDuration,
-  parseYesNo,
-  type Action,
-  type ActionResult
-} from '@shared/actions'
+import { canAlwaysAllow, describeAction, parseYesNo, type Action } from '@shared/actions'
+import { clockTime, type Reminder } from '@shared/reminders'
 import type { CompanionApi } from '@shared/ipc'
 import type { Emotion, Persona } from '@shared/personas'
 import type { Settings } from '@shared/settings'
@@ -32,20 +26,20 @@ const fill = (line: string, vars: Record<string, string>) =>
   line.replace(/\{(\w+)\}/g, (_m, k: string) => vars[k] ?? '').replace(/\s+/g, ' ').trim()
 
 export function createActions(deps: ActionDeps) {
-  const timers = new Set<number>()
-
-  function startTimer(a: Extract<Action, { type: 'timer' }>): ActionResult {
-    const id = window.setTimeout(() => {
-      timers.delete(id)
-      deps.summon()
-      deps.setEmotion('surprised')
-      beep()
-      const line = deps.persona().lines.timerDone + (a.label ? ` (${a.label})` : '')
-      deps.chat.say(line)
-      void deps.speak(line)
-    }, a.seconds * 1000)
-    timers.add(id)
-    return { ok: true, message: `Timer set for ${formatDuration(a.seconds)}.` }
+  /** A timer, reminder or alarm going off (they're kept by the main process, so they survive a restart). */
+  function due(r: Reminder, late: boolean): void {
+    const lines = deps.persona().lines
+    deps.summon()
+    deps.setEmotion('surprised')
+    beep(r.kind === 'alarm' ? 4 : 1)
+    let line = r.kind === 'alarm'
+      ? fill(lines.alarmDue, { time: clockTime(r.at) }) + (r.label ? ` (${r.label})` : '')
+      : r.label
+        ? fill(lines.reminderDue, { label: r.label })
+        : lines.timerDone
+    if (late) line = `${lines.missed} ${line}`
+    deps.chat.say(line)
+    void deps.speak(line)
   }
 
   async function ask(question: string, canAlways: boolean): Promise<Choice> {
@@ -88,10 +82,9 @@ export function createActions(deps: ActionDeps) {
     deps.chat.status('…')
     // The main process checks the action again and keeps the activity log.
     const result = await deps.api.runAction(action, source)
-    const final = result.ok && action.type === 'timer' ? startTimer(action) : result
-    const line = fill(final.ok ? persona.lines.done : persona.lines.failed, { result: final.message })
-    deps.setEmotion(final.ok ? 'happy' : 'sad')
-    deps.chat.say(line, { error: !final.ok })
+    const line = fill(result.ok ? persona.lines.done : persona.lines.failed, { result: result.message })
+    deps.setEmotion(result.ok ? 'happy' : 'sad')
+    deps.chat.say(line, { error: !result.ok })
     void deps.speak(line)
   }
 
@@ -99,28 +92,25 @@ export function createActions(deps: ActionDeps) {
     async run(actions: Action[], source: 'user' | 'ai', intro?: string): Promise<void> {
       for (const [i, a] of actions.entries()) await runOne(a, source, i === 0 ? intro : '')
     },
-    cancelTimers(): void {
-      timers.forEach((id) => window.clearTimeout(id))
-      timers.clear()
-    }
+    due
   }
 }
 
-/** Three short beeps, made on the fly (no sound files). */
-function beep(): void {
+/** Three short beeps per round, made on the fly (no sound files). */
+function beep(rounds = 1): void {
   try {
     const ctx = new AudioContext()
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3 * rounds; i++) {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.frequency.value = 880
       gain.gain.value = 0.15
       osc.connect(gain).connect(ctx.destination)
-      const t = ctx.currentTime + i * 0.3
+      const t = ctx.currentTime + i * 0.3 + Math.floor(i / 3) * 0.6
       osc.start(t)
       osc.stop(t + 0.15)
     }
-    window.setTimeout(() => void ctx.close(), 1500)
+    window.setTimeout(() => void ctx.close(), 1500 * rounds + 500)
   } catch {
     /* no audio device */
   }

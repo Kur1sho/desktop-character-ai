@@ -2,6 +2,7 @@
 import type { Action, ActionResult } from './actions'
 import type { Layout } from './layout'
 import type { Emotion } from './personas'
+import type { Reminder } from './reminders'
 import type { ProviderId, PublicSettings, Settings } from './settings'
 
 export const IPC = {
@@ -30,7 +31,10 @@ export const IPC = {
   brainWarmUp: 'brain:warm-up',
   brainProgress: 'brain:progress',
   lookAtScreen: 'vision:look',
-  visionStatus: 'vision:status'
+  visionStatus: 'vision:status',
+  reminderDue: 'reminders:due',
+  listReminders: 'reminders:list',
+  cancelReminders: 'reminders:cancel'
 } as const
 
 export interface AskOptions {
@@ -96,4 +100,10 @@ export interface CompanionApi {
   lookAtScreen(text: string): Promise<ChatReply>
   /** "Downloading my eyes… 40%", "Looking…" while lookAtScreen works. */
   onVisionStatus(cb: (text: string) => void): void
+  /** A timer, reminder or alarm going off. `late` means it was missed while the app was closed. */
+  onReminderDue(cb: (r: Reminder, late: boolean) => void): void
+  /** Timers, reminders and alarms still to come, soonest first. */
+  listReminders(): Promise<Reminder[]>
+  /** Cancels these (by id) and returns the ones that were cancelled. */
+  cancelReminders(ids: string[]): Promise<Reminder[]>
 }

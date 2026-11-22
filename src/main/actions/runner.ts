@@ -7,7 +7,9 @@ import { app, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { bestAppMatch, describeAction, validateAction, type Action, type ActionResult } from '../../shared/actions'
+import { bestAppMatch, describeAction, formatDuration, validateAction, type Action, type ActionResult } from '../../shared/actions'
+import { formatWhen } from '../../shared/reminders'
+import { addReminder } from '../reminders'
 import { clearlyAGame, launchGame, startSteamGame, steamGames, systemAction, windowAction } from './desktop'
 import { pickGame } from '../../shared/desktopMatch'
 import { logConversation } from '../conversationLog'
@@ -258,7 +260,7 @@ export function activityLogPath(): string {
   return join(app.getPath('userData'), 'activity', 'actions.log')
 }
 
-/** Runs one action the user has confirmed. Timers run in the companion window, so they're only logged here. */
+/** Runs one action the user has confirmed. */
 export async function runAction(raw: unknown, source: 'user' | 'ai'): Promise<ActionResult> {
   const action = validateAction(raw)
   if (!action) return { ok: false, message: "That isn't something I'm allowed to do." }
@@ -302,8 +304,20 @@ export async function runAction(raw: unknown, source: 'user' | 'ai'): Promise<Ac
         result = { ok: true, message: { up: 'Turned it up.', down: 'Turned it down.', mute: 'Done.' }[action.change] }
         break
       case 'timer':
-        result = { ok: true, message: 'Timer set.' }
+        addReminder('timer', Date.now() + action.seconds * 1000, action.label)
+        result = {
+          ok: true,
+          message: action.label
+            ? `I'll remind you in ${formatDuration(action.seconds)}.`
+            : `Timer set for ${formatDuration(action.seconds)}.`
+        }
         break
+      case 'reminder': {
+        const r = addReminder(action.kind, action.at, action.label)
+        const when = formatWhen(r.at, new Date())
+        result = { ok: true, message: action.kind === 'alarm' ? `Alarm set for ${when.replace(/^at /, '')}.` : `I'll remind you ${when}.` }
+        break
+      }
     }
   } catch (err) {
     result = { ok: false, message: err instanceof Error ? err.message : String(err) }

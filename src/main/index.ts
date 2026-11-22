@@ -8,6 +8,8 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
+  powerMonitor,
   screen,
   session,
   shell,
@@ -23,6 +25,9 @@ import { activityLogPath, runAction } from './actions/runner'
 import { conversationLogPath, logConversation } from './conversationLog'
 import { chat, clearHistory, lookAtScreen, prepare, record } from './ai/conversation'
 import { stopVision } from './brain/vision'
+import { cancelReminders, checkReminders, listReminders, startReminders } from './reminders'
+import { clockTime, type Reminder } from '../shared/reminders'
+import { getPersona } from '../shared/personas'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 import { nativeBrainAvailable, stopNativeBrain, warmUpNativeBrain } from './brain/nativeBrain'
 
@@ -70,8 +75,21 @@ function createWindow(): void {
   win.setIgnoreMouseEvents(true, { forward: true })
 
   loadPage(win, 'index.html')
-  win.webContents.on('did-finish-load', sendLayout)
+  win.webContents.on('did-finish-load', () => {
+    sendLayout()
+    // Reminders go off in the companion window (it speaks them), so start once it's there.
+    startReminders(showReminder)
+  })
   win.on('closed', () => (win = null))
+}
+
+/** A reminder is due: the character says it, and Windows shows a notification too (in case a game is full screen). */
+function showReminder(r: Reminder, late: boolean): void {
+  win?.webContents.send(IPC.reminderDue, r, late)
+  if (!Notification.isSupported()) return
+  const title = r.kind === 'timer' && !r.label ? "Time's up" : r.kind === 'alarm' ? 'Alarm' : 'Reminder'
+  const body = r.label ? r.label[0].toUpperCase() + r.label.slice(1) : r.kind === 'alarm' ? `It's ${clockTime(r.at)}.` : 'Your timer is done.'
+  new Notification({ title: `${getPersona(getSettings().personaId).name}: ${title}`, body, silent: true }).show()
 }
 
 function loadPage(target: BrowserWindow, page: string): void {
@@ -239,6 +257,10 @@ ipcMain.handle(IPC.brainWarmUp, async () => {
     return { mode: 'native', error: err instanceof Error ? err.message : String(err) }
   }
 })
+ipcMain.handle(IPC.listReminders, () => listReminders())
+ipcMain.handle(IPC.cancelReminders, (_e, ids: unknown) =>
+  cancelReminders(Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : [])
+)
 ipcMain.on(IPC.logConversation, (_e, line: unknown) => logConversation(String(line)))
 ipcMain.on(IPC.openConversationLog, () => openLog(conversationLogPath()))
 
@@ -292,6 +314,9 @@ app.whenReady().then(() => {
     },
     { useSystemPicker: false }
   )
+  // A PC waking from sleep checks for reminders that came due meanwhile.
+  powerMonitor.on('resume', checkReminders)
+  powerMonitor.on('unlock-screen', checkReminders)
   for (const evt of ['display-metrics-changed', 'display-added', 'display-removed'] as const) {
     screen.on(evt as 'display-added', () => {
       if (!win) return

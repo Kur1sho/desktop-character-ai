@@ -5,6 +5,7 @@ import { describeAction, extractActions, parseIntents, wasRequested, type Action
 import { quickMath } from '@shared/quickMath'
 import { clipboardRequest, withCopiedText } from '@shared/clipboard'
 import { screenRequest } from '@shared/screen'
+import { parseReminderQuery, type ReminderQuery } from '@shared/reminders'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -49,7 +50,9 @@ export function createChat(
   /** Writes a line to the conversation log (what was heard and decided). */
   log: (line: string) => void = () => {},
   /** Looks at the screen and answers about it. Only called when the user asks about the screen. */
-  lookAtScreen: ((text: string) => Promise<ChatReply>) | null = null
+  lookAtScreen: ((text: string) => Promise<ChatReply>) | null = null,
+  /** Answers "what reminders do I have?" and "cancel my timer". */
+  reminders: ((q: ReminderQuery) => Promise<string>) | null = null
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -134,6 +137,15 @@ export function createChat(
         onEmotion(seen.emotion)
         show(seen.text || '…', readingMs(seen.text), Boolean(seen.error))
         if (!seen.error && seen.text) onReply(seen.text)
+        return
+      }
+      const rq = clip || !reminders ? null : parseReminderQuery(text)
+      if (rq) {
+        const answer = await reminders!(rq)
+        if (mine !== generation) return
+        log(`  -> ${rq.op === 'list' ? 'listed' : 'cancelled'} reminders: ${answer}`)
+        show(answer, readingMs(answer))
+        onReply(answer)
         return
       }
       const intents = clip ? null : parseIntents(text)
