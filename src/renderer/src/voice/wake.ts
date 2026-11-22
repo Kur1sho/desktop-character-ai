@@ -10,6 +10,7 @@ import { Segmenter } from './segmenter'
 import { transcribe } from './stt'
 import { matchWakeWord } from './wakeMatch'
 import { acquireMic, releaseMic } from './mic'
+import { createSpeechDetector, SPEECH_FRAME } from './speechDetector'
 
 export interface WakeOptions {
   name: () => string
@@ -26,7 +27,7 @@ export interface WakeOptions {
 }
 
 const SAMPLE_RATE = 16000
-const FRAME = 512 // 32 ms
+const FRAME = SPEECH_FRAME // 32 ms
 /** Start checking a phrase this early... */
 const FIRST_CHECK_MS = 700
 /** ...and again this often while it continues. */
@@ -65,6 +66,11 @@ export async function startWake(opts: WakeOptions): Promise<void> {
     return
   }
 
+  const detector = await createSpeechDetector()
+  if (stopped) {
+    releaseMic()
+    return
+  }
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
   const source = ctx.createMediaStreamSource(stream)
   const proc = ctx.createScriptProcessor(FRAME, 1, 1)
@@ -110,13 +116,23 @@ export async function startWake(opts: WakeOptions): Promise<void> {
     if (stopped) return
     if (opts.isBusy()) {
       seg = newSegmenter() // start fresh after being busy
+      detector?.reset()
       nextCheckAt = FIRST_CHECK_MS
       fired = false
       pendingFinal = null
       return
     }
     const data = new Float32Array(e.inputBuffer.getChannelData(0))
-    const phrase = seg.push(data, rms(data), frameMs)
+    if (!detector) return handle(data)
+    detector.process(data).then(
+      (speech) => handle(data, speech),
+      () => handle(data)
+    )
+  }
+
+  const handle = (data: Float32Array, speech?: number) => {
+    if (stopped || opts.isBusy()) return
+    const phrase = seg.push(data, rms(data), frameMs, speech)
     if (phrase) {
       const already = fired
       nextCheckAt = FIRST_CHECK_MS

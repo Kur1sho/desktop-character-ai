@@ -86,12 +86,27 @@ let thinking = false
 async function refreshSettings(): Promise<void> {
   if (!api) return
   settings = await api.getSettings()
-  // Start fetching the built-in brain in the background so the first chat is quick.
-  if (settings.provider === 'builtin') warmUp(modelFor(settings))
-  // Load the speech models now, so the first "Hey ..." or hotkey press is quick.
-  preloadStt(settings.sttSize)
+  // Load everything now (the speech models and the built-in brain), so the
+  // first "Hey ..." is as quick as every one after it.
+  const progress: number[] = []
+  const track = (job: (onProgress: (pct: number) => void) => Promise<void>) => {
+    const i = progress.push(0) - 1
+    const report = (pct: number) => {
+      progress[i] = pct
+      if (setupRunning && !listening && !thinking) {
+        const avg = Math.round(progress.reduce((a, b) => a + b, 0) / progress.length)
+        chat.status(`Getting ready (one time only)… ${avg}%`)
+      }
+    }
+    return job(report).then(() => report(100))
+  }
+  const jobs = [track((p) => preloadStt(settings.sttSize, 'command', p))]
+  if (settings.wakeWord) jobs.push(track((p) => preloadStt('tiny', 'wake', p)))
+  if (settings.provider === 'builtin') jobs.push(track((p) => warmUp(modelFor(settings), p)))
+  if (!settings.setupDone) void runSetup(jobs)
+  else for (const j of jobs) j.catch((err: Error) => console.error('Preload failed:', err.message))
+
   if (settings.wakeWord) {
-    preloadStt('tiny', 'wake')
     void startWake({
       name: () => getPersona(settings.personaId).name,
       isBusy: () => listening !== null || speaking || thinking,
@@ -111,6 +126,33 @@ async function refreshSettings(): Promise<void> {
   } else {
     stopWake()
   }
+}
+
+// --- First-time setup: download and prepare the local models up front -----
+let setupRunning = false
+
+async function runSetup(jobs: Promise<void>[]): Promise<void> {
+  if (setupRunning || !api) return
+  setupRunning = true
+  summon()
+  character?.setEmotion('happy')
+  chat.status('Getting ready (one time only)… 0%')
+  const results = await Promise.allSettled(jobs)
+  setupRunning = false
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (failed) {
+    // Not marked as done, so it tries again next launch.
+    character?.setEmotion('sad')
+    chat.say(failed.reason instanceof Error ? failed.reason.message : String(failed.reason), { error: true })
+    return
+  }
+  const name = getPersona(settings.personaId).name
+  await api.saveSettings({ ...settings, setupDone: true })
+  chat.say(
+    settings.wakeWord
+      ? `All set! Just say "Hey ${name}" whenever you need me.`
+      : 'All set! Press Ctrl+Shift+Space to talk to me.'
+  )
 }
 
 // --- Voice: press the hotkey, talk, and it stops when you go quiet ---------

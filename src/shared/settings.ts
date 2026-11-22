@@ -71,6 +71,8 @@ export interface Settings {
   wakeWord: boolean
   /** Speech recognition model size: bigger is more accurate but slower. */
   sttSize: 'tiny' | 'base' | 'small'
+  /** The one-time setup (downloading and preparing the local models) has finished. */
+  setupDone: boolean
 }
 
 /** What the settings screen sees. Keys never leave the main process; only whether one is saved. */
@@ -85,7 +87,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaUrl: 'http://127.0.0.1:11434',
   voiceOutput: true,
   wakeWord: true,
-  sttSize: 'base'
+  sttSize: 'base',
+  setupDone: false
 }
 
 export function modelFor(settings: Settings): string {

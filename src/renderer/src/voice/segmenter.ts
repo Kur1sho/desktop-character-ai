@@ -2,6 +2,8 @@
 // always-on wake word. Keeps a little audio from before each phrase so the
 // first syllable isn't cut off.
 
+import { SPEECH_OFF, SPEECH_ON } from './speechThresholds'
+
 const RATIO = 3
 const MIN_THRESHOLD = 0.006
 const MAX_THRESHOLD = 0.03
@@ -49,9 +51,11 @@ export class Segmenter {
   }
 
   /** Feed one frame. Returns a finished phrase, or null. */
-  push(samples: Float32Array, rms: number, frameMs: number): Float32Array | null {
+  push(samples: Float32Array, rms: number, frameMs: number, speech?: number): Float32Array | null {
     this.noise = rms < this.noise ? rms : this.noise * (1 + 0.0002 * frameMs)
-    const loud = rms > this.threshold
+    // With the speech detector, only a voice counts, not typing or other noise.
+    const loud =
+      speech === undefined ? rms > this.threshold : speech > (this.isActive ? SPEECH_OFF : SPEECH_ON)
 
     if (!this.isActive) {
       this.preRoll.push(samples)
