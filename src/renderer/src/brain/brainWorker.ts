@@ -42,6 +42,8 @@ function load(model: string): Promise<TextGenerationPipeline> {
         }
       }
     })) as TextGenerationPipeline
+    // Generate one token so the GPU is set up before the first real chat.
+    await gen([{ role: 'user', content: 'hi' }] as never, { max_new_tokens: 1 })
     post({ type: 'ready', device: gpu ? 'gpu' : 'cpu' })
     return gen
   })()
@@ -56,6 +58,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   try {
     if (msg.type === 'load') {
       await load(msg.model)
+      post({ type: 'ready', device: '' })
       return
     }
     const gen = await load(msg.model)

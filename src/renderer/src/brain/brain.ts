@@ -2,6 +2,7 @@
 
 let worker: Worker | null = null
 let nextId = 1
+const loads: { resolve: () => void; reject: (e: Error) => void }[] = []
 const pending = new Map<number, { resolve: (t: string) => void; reject: (e: Error) => void }>()
 let progressCb: ((percent: number) => void) | null = null
 
@@ -12,18 +13,26 @@ function getWorker(): Worker {
     const m = e.data
     if (m.type === 'progress') progressCb?.(m.percent)
     else if (m.type === 'result') pending.get(m.id)?.resolve(m.text)
+    else if (m.type === 'ready') loads.splice(0).forEach((l) => l.resolve())
     else if (m.type === 'error') {
       if (m.id) pending.get(m.id)?.reject(new Error(friendly(m.message)))
-      else console.error('Built-in brain failed to load:', m.message)
+      else {
+        console.error('Built-in brain failed to load:', m.message)
+        loads.splice(0).forEach((l) => l.reject(new Error(friendly(m.message))))
+      }
     }
     if (m.id) pending.delete(m.id)
   }
   return worker
 }
 
-/** Starts downloading and loading the model in the background. */
-export function warmUp(model: string): void {
-  getWorker().postMessage({ type: 'load', model })
+/** Starts downloading and loading the model in the background. Resolves once it's ready. */
+export function warmUp(model: string, onProgress?: (percent: number) => void): Promise<void> {
+  if (onProgress) progressCb = onProgress
+  return new Promise((resolve, reject) => {
+    loads.push({ resolve, reject })
+    getWorker().postMessage({ type: 'load', model })
+  })
 }
 
 export function think(

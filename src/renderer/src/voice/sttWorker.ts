@@ -6,6 +6,7 @@ import { pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/
 type InMsg = { type: 'load'; model: string } | { type: 'transcribe'; id: number; audio: Float32Array; model: string }
 type OutMsg =
   | { type: 'progress'; percent: number }
+  | { type: 'ready' }
   | { type: 'result'; id: number; text: string }
   | { type: 'error'; id?: number; message: string }
 
@@ -64,6 +65,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     if (msg.type === 'load') {
       // Warm up with a short silent clip so the first real request is fast.
       await asr(new Float32Array(8000))
+      post({ type: 'ready' })
       return
     }
     // The .en models are English-only, so no language or task options.

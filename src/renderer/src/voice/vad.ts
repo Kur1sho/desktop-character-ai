@@ -5,6 +5,8 @@
 // creeping up so it can adapt), so it still works when the user starts
 // talking the instant they press the hotkey.
 
+import { SPEECH_OFF, SPEECH_ON } from './speechThresholds'
+
 export type VadResult = 'waiting' | 'speaking' | 'done' | 'no-speech'
 
 export interface VadOptions {
@@ -42,15 +44,21 @@ export class Vad {
     return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, base))
   }
 
-  /** Feed one frame. Returns the state after it. */
-  push(rms: number, frameMs: number): VadResult {
+  /**
+   * Feed one frame. Returns the state after it.
+   * @param speech the speech detector's probability for this frame. When
+   *   given it decides what counts as talking, so typing and other noise are
+   *   ignored; otherwise loudness is used.
+   */
+  push(rms: number, frameMs: number, speech?: number): VadResult {
     this.elapsed += frameMs
     // Track the noise floor: drop instantly to quieter frames, creep up slowly.
     this.noise = rms < this.noise ? rms : this.noise * (1 + 0.0005 * frameMs)
 
     if (this.elapsed >= this.o.maxMs) return this.started ? 'done' : 'no-speech'
 
-    const loud = rms > this.threshold
+    const loud =
+      speech === undefined ? rms > this.threshold : speech > (this.started ? SPEECH_OFF : SPEECH_ON)
     if (loud) {
       this.loudFor += frameMs
       this.quietFor = 0

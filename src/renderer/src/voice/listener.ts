@@ -2,6 +2,7 @@
 // expects), stopping automatically when the user goes quiet.
 import { rms, Vad, type VadResult } from './vad'
 import { acquireMic, releaseMic } from './mic'
+import { createSpeechDetector, SPEECH_FRAME, type SpeechDetector } from './speechDetector'
 
 export interface ListenResult {
   audio: Float32Array | null
@@ -14,7 +15,7 @@ export interface Listening {
 }
 
 const SAMPLE_RATE = 16000
-const FRAME = 1024 // samples per frame, about 64 ms
+const FRAME = SPEECH_FRAME // samples per frame, 32 ms
 
 /**
  * @param preRoll audio already heard (from the wake word) to put in front of
@@ -49,8 +50,10 @@ export function listen(
     }
     cancel = () => finish('cancelled')
 
-    acquireMic()
-      .then((s) => {
+    let detector: SpeechDetector | null = null
+    Promise.all([acquireMic(), createSpeechDetector()])
+      .then(([s, d]) => {
+        detector = d
         haveMic = true
         if (finished) {
           releaseMic()
@@ -66,9 +69,15 @@ export function listen(
           const data = new Float32Array(e.inputBuffer.getChannelData(0))
           chunks.push(data)
           const level = rms(data)
-          const state = vad.push(level, frameMs)
-          onLevel?.(level, state, vad.threshold)
-          if (state === 'done' || state === 'no-speech') finish(state)
+          const step = (speech?: number) => {
+            if (finished) return
+            // The speech detector ignores typing, so the recording ends when you stop talking.
+            const state = vad.push(level, frameMs, speech)
+            onLevel?.(level, state, vad.threshold)
+            if (state === 'done' || state === 'no-speech') finish(state)
+          }
+          if (detector) detector.process(data).then(step, () => step())
+          else step()
         }
         source.connect(proc)
         proc.connect(ctx.destination)
