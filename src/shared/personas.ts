@@ -174,6 +174,14 @@ export function parseEmotion(reply: string): { emotion: Emotion; text: string } 
       if (!emotion && e) emotion = e
       return ' '
     })
+    // Some small models put the emotion in action brackets: <<frustrated>>.
+    .replace(/<<\s*([a-zA-Z]+)\s*>>/g, (all, word: string) => {
+      const w = word.toLowerCase()
+      const e = (EMOTIONS as readonly string[]).includes(w) ? (w as Emotion) : EMOTION_ALIASES[w]
+      if (!e) return all
+      if (!emotion) emotion = e
+      return ' '
+    })
     .replace(/\s+([.,!?])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim()

@@ -122,3 +122,14 @@ describe('copied text', () => {
     expect(shortenReply(long, msg).match(/Sentence/g)?.length).toBe(8)
   })
 })
+
+describe('misheard and sloppy requests', () => {
+  it('handles "fire Minecraft" when speech recognition drops the "up"', () => {
+    expect(parseIntent('Fire Minecraft.')).toEqual({ type: 'game', name: 'Minecraft' })
+    expect(parseIntent('boot elden ring')).toEqual({ type: 'game', name: 'Elden Ring' })
+  })
+  it('accepts close variants of tag names from small models', () => {
+    expect(extractActions('<<launch Minecraft>>').actions).toEqual([{ type: 'game', name: 'Minecraft' }])
+    expect(extractActions('<<open Discord>>').actions).toEqual([{ type: 'open_app', app: 'Discord' }])
+  })
+})
