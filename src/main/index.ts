@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   desktopCapturer,
   dialog,
   globalShortcut,
@@ -201,8 +202,8 @@ ipcMain.handle(IPC.getInitialModel, () => {
   return path ? { data: toArrayBuffer(readFileSync(path)), name: basename(path) } : null
 })
 
-ipcMain.handle(IPC.chat, (_e, text: string) => chat(String(text).slice(0, 2000)))
-ipcMain.handle(IPC.chatPrepare, (_e, text: string) => prepare(String(text).slice(0, 2000)))
+ipcMain.handle(IPC.chat, (_e, text: string) => chat(String(text).slice(0, 3000)))
+ipcMain.handle(IPC.chatPrepare, (_e, text: string) => prepare(String(text).slice(0, 3000)))
 ipcMain.handle(IPC.chatRecord, (_e, userText: string, reply: string) => record(String(userText), String(reply)))
 ipcMain.handle(IPC.getSettings, () => getPublicSettings())
 ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
@@ -213,6 +214,7 @@ ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
 })
 ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => setApiKey(provider, key))
 ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
+ipcMain.handle(IPC.readClipboard, async () => String(await clipboard.readText()).slice(0, 4000))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
 

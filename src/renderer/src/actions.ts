@@ -1,7 +1,7 @@
 // Asks before every action, then runs it. The user can answer with the
 // buttons in the speech bubble or, if they asked by voice, by saying yes or no.
 import {
-  CAN_ALWAYS_ALLOW,
+  canAlwaysAllow,
   describeAction,
   formatDuration,
   parseYesNo,
@@ -68,7 +68,7 @@ export function createActions(deps: ActionDeps) {
   async function runOne(action: Action, source: 'user' | 'ai', intro = ''): Promise<void> {
     const persona = deps.persona()
     const settings = deps.settings()
-    const canAlways = CAN_ALWAYS_ALLOW.has(action.type)
+    const canAlways = canAlwaysAllow(action)
     const preApproved = canAlways && (settings.autoApprove || settings.alwaysAllow.includes(action.type))
     if (!preApproved) {
       deps.setEmotion('neutral')
