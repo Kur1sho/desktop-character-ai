@@ -15,6 +15,10 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 - Idle life: breathing, blinking, and the head follows your mouse
 - Drag the character left and right along the taskbar
 - Double-click the character, or click the tray icon, to summon it again
+- **Talk to it**: click the character (or press Ctrl+Shift+Space) and type. It answers in a speech bubble, in character, with matching facial expressions
+- Two personalities: **Robotico** (deadpan robot) and **Suzu** (tsundere, placeholder name)
+- Choose the AI in Settings (tray menu): local **Ollama** (free, private), or your own key for **Claude**, **OpenAI**, **OpenRouter** or **Gemini**
+- Keys are encrypted with Windows' own protection and never shown again; chat history is stored only on your PC, with a button to wipe it
 
 ## Running it on Windows
 
@@ -28,7 +32,15 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
    npm run dev
    ```
 
+   If PowerShell says scripts are disabled, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once first.
+
 3. Robotico appears above your taskbar near the right. The teal dot in the system tray has the menu (Summon, Load VRM character, Quit).
+
+## Free local AI (optional)
+
+1. Install [Ollama](https://ollama.com)
+2. In PowerShell: `ollama pull gemma3:4b`
+3. That's it: Ollama is the default provider, so just click the character and type
 
 ## Scripts
 

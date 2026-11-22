@@ -25,3 +25,12 @@ describe('idle motion', () => {
     expect(easeOutBack(0.6)).toBeGreaterThan(1) // overshoot
   })
 })
+
+import { readingMs } from '../src/renderer/src/chat'
+
+describe('readingMs', () => {
+  it('gives short replies a few seconds and caps long ones', () => {
+    expect(readingMs('Hi')).toBe(2820)
+    expect(readingMs('word '.repeat(200))).toBe(15000)
+  })
+})

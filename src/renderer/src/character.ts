@@ -1,4 +1,5 @@
 import type { Object3D, Vector3 } from 'three'
+import type { Emotion } from '@shared/personas'
 
 /** Anything the app can put on the desktop: the built-in robot or a VRM model. */
 export interface Character {
@@ -12,6 +13,8 @@ export interface Character {
   setBlink(amount: number): void
   /** Called every frame with time since the last frame and total time, in seconds. */
   update(dt: number, time: number): void
+  /** Show an emotion on the face until the next one. */
+  setEmotion(emotion: Emotion): void
   /** Play a short wave, used when summoned. */
   wave(): void
   dispose(): void

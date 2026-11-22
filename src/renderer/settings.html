@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Desktop Companion Settings</title>
+    <style>
+      :root { color-scheme: light dark; --accent: #1fb8b5; --muted: #6b7280; --line: #d6dae0; }
+      @media (prefers-color-scheme: dark) { :root { --muted: #9aa3ae; --line: #3a4048; } }
+      body { margin: 0; padding: 24px; font: 14px/1.45 'Segoe UI', system-ui, sans-serif; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.lead { margin: 0 0 20px; color: var(--muted); }
+      fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; margin: 0 0 16px; }
+      legend { font-weight: 600; padding: 0 6px; }
+      label { display: block; margin: 10px 0 4px; font-weight: 600; }
+      select, input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font: inherit; }
+      .hint { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+      .row { display: flex; gap: 8px; }
+      .row input { flex: 1; }
+      button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); font: inherit; cursor: pointer; background: transparent; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+      .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+      #status { color: var(--muted); }
+      .privacy { font-size: 12.5px; color: var(--muted); margin-top: 18px; }
+    </style>
+  </head>
+  <body>
+    <h1>Settings</h1>
+    <p class="lead">Choose your companion and the AI that powers them.</p>
+
+    <fieldset>
+      <legend>Character</legend>
+      <label for="persona">Who's on your desktop</label>
+      <select id="persona"></select>
+      <p class="hint" id="personaHint"></p>
+      <button id="clearMemory" style="margin-top: 10px">Forget our conversations</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>AI brain</legend>
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+
+      <label for="model">Model</label>
+      <input id="model" type="text" spellcheck="false" />
+      <p class="hint" id="modelHint"></p>
+
+      <div id="ollamaBox">
+        <label for="ollamaUrl">Ollama address</label>
+        <input id="ollamaUrl" type="text" spellcheck="false" />
+      </div>
+
+      <div id="keyBox">
+        <label for="key">API key</label>
+        <div class="row">
+          <input id="key" type="password" autocomplete="off" spellcheck="false" />
+          <button id="removeKey">Remove</button>
+        </div>
+        <p class="hint" id="keyHint"></p>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <span id="status"></span>
+      <button class="primary" id="save">Save</button>
+    </div>
+
+    <p class="privacy">
+      Your settings, keys and chat history stay on this PC. Keys are encrypted with Windows' own protection.
+      Messages go only to the AI provider you pick, or nowhere at all with local Ollama.
+    </p>
+
+    <script type="module" src="./src/settings.ts"></script>
+  </body>
+</html>

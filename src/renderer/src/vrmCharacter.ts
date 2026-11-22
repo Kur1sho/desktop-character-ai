@@ -3,6 +3,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
+import type { Emotion } from '@shared/personas'
 import type { Character } from './character'
 import { breath } from './idle'
 
@@ -39,6 +40,21 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
   const chest = bone('chest')
   const neck = bone('neck')
 
+  // VRM preset expressions for each emotion, with weights.
+  const EXPRESSIONS: Record<Emotion, Record<string, number>> = {
+    neutral: {},
+    happy: { happy: 1 },
+    angry: { angry: 1 },
+    sad: { sad: 1 },
+    surprised: { surprised: 1 },
+    flustered: { happy: 0.4, surprised: 0.3 },
+    smug: { relaxed: 0.8, happy: 0.2 },
+    sleepy: { relaxed: 1 }
+  }
+  const NAMES = ['happy', 'angry', 'sad', 'surprised', 'relaxed']
+  let emotion: Emotion = 'neutral'
+  const weights: Record<string, number> = {}
+
   let waveUntil = 0
   let clock = 0
 
@@ -49,7 +65,11 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
       lookTarget.position.copy(root.worldToLocal(target.clone()))
     },
     setBlink(amount) {
-      vrm.expressionManager?.setValue('blink', amount)
+      // Some expressions close the eyes already; avoid a double blink.
+      vrm.expressionManager?.setValue('blink', emotion === 'happy' ? 0 : amount)
+    },
+    setEmotion(next) {
+      emotion = next
     },
     update(dt, time) {
       clock = time
@@ -67,6 +87,12 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
       if (spine) spine.rotation.x = b * 0.015
       if (chest) chest.rotation.x = b * 0.02
       if (neck) neck.rotation.z = Math.sin(time * 0.7) * 0.03
+      const target = EXPRESSIONS[emotion]
+      const k = 1 - Math.exp(-dt * 8)
+      for (const name of NAMES) {
+        weights[name] = (weights[name] ?? 0) + ((target[name] ?? 0) - (weights[name] ?? 0)) * k
+        vrm.expressionManager?.setValue(name, weights[name])
+      }
       vrm.update(dt)
     },
     wave() {

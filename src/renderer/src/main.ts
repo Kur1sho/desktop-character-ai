@@ -3,6 +3,7 @@ import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
+import { createChat } from './chat'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
 
@@ -39,6 +40,7 @@ const stage = new THREE.Group()
 scene.add(stage)
 
 let character: Character | null = null
+const chat = createChat(api, (emotion) => character?.setEmotion(emotion))
 let layout: Layout | null = null
 let anchorX = 0
 let popStart = -1
@@ -83,6 +85,8 @@ function floorY(): number {
 let passThrough = true
 let dragging = false
 let dragOffset = 0
+let dragStartX = 0
+let movedWhileDragging = false
 const mouse = new THREE.Vector3(window.innerWidth / 2, window.innerHeight / 2, 400)
 
 function characterScreenBox(): THREE.Box2 | null {
@@ -94,6 +98,12 @@ function characterScreenBox(): THREE.Box2 | null {
   )
 }
 
+function overChat(x: number, y: number): boolean {
+  if (!chat.isActive()) return false
+  const r = chat.el.getBoundingClientRect()
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+}
+
 function setPassThrough(next: boolean): void {
   if (next === passThrough) return
   passThrough = next
@@ -103,27 +113,41 @@ function setPassThrough(next: boolean): void {
 window.addEventListener('mousemove', (e) => {
   mouse.set(e.clientX, window.innerHeight - e.clientY, 400)
   if (dragging && layout) {
+    if (Math.abs(e.clientX - dragStartX) > 4) movedWhileDragging = true
     const min = layout.workArea.x + 40
     const max = layout.workArea.x + layout.workArea.width - 40
     anchorX = THREE.MathUtils.clamp(e.clientX - dragOffset, min, max)
     return
   }
   const box = characterScreenBox()
-  setPassThrough(!(box && box.containsPoint(new THREE.Vector2(e.clientX, e.clientY))))
+  const overCharacter = Boolean(box && box.containsPoint(new THREE.Vector2(e.clientX, e.clientY)))
+  setPassThrough(!(overCharacter || overChat(e.clientX, e.clientY)))
 })
 
 window.addEventListener('mousedown', (e) => {
-  if (passThrough || e.button !== 0) return
+  if (passThrough || e.button !== 0 || overChat(e.clientX, e.clientY)) return
   dragging = true
+  movedWhileDragging = false
+  dragStartX = e.clientX
   dragOffset = e.clientX - anchorX
 })
 window.addEventListener('mouseup', () => {
   if (!dragging) return
   dragging = false
 })
-window.addEventListener('dblclick', () => {
-  if (!passThrough) summon()
+// Single click on the character opens the text box; double click waves.
+window.addEventListener('click', (e) => {
+  if (passThrough || overChat(e.clientX, e.clientY) || movedWhileDragging) return
+  openChat()
 })
+window.addEventListener('dblclick', (e) => {
+  if (!passThrough && !overChat(e.clientX, e.clientY)) summon()
+})
+
+function openChat(): void {
+  setPassThrough(false)
+  chat.openInput()
+}
 
 // --- Wiring to the main process ------------------------------------------
 api?.onLayout((next) => {
@@ -132,6 +156,13 @@ api?.onLayout((next) => {
   if (first) anchorX = next.anchor.x
 })
 api?.onSummon(summon)
+api?.onOpenChat(() => {
+  summon()
+  openChat()
+})
+api?.onPersonaChanged(() => {
+  chat.say('…Hello? I feel different.')
+})
 api?.onLoadModel(async (data, name) => {
   try {
     setCharacter(await loadVrmCharacter(data))
@@ -186,6 +217,9 @@ renderer.setAnimationLoop(() => {
   stage.position.set(anchorX, floor + rise, 0)
 
   if (character) {
+    // Keep the speech bubble just above the character's head.
+    const top = floor + rise + CHARACTER_PX + 12
+    chat.place(anchorX, window.innerHeight - top)
     character.lookAt(mouse)
     character.setBlink(blinkAmount(t))
     character.update(dt, t)
