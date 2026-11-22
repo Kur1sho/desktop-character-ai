@@ -7,6 +7,14 @@ export default defineConfig({
   },
   preload: {},
   renderer: {
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@shared': resolve('src/shared') } },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          settings: resolve('src/renderer/settings.html')
+        }
+      }
+    }
   }
 })

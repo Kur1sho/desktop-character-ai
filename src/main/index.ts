@@ -1,11 +1,17 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
+import type { ProviderId, Settings } from '../shared/settings'
+import { chat, clearHistory } from './ai/conversation'
+import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
+let settingsWin: BrowserWindow | null = null
+
+const CHAT_HOTKEY = 'CommandOrControl+Shift+Space'
 
 // Only one copy of the companion should ever run.
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -42,13 +48,42 @@ function createWindow(): void {
   // over the character, so the rest of the desktop works as normal.
   win.setIgnoreMouseEvents(true, { forward: true })
 
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadPage(win, 'index.html')
   win.webContents.on('did-finish-load', sendLayout)
   win.on('closed', () => (win = null))
+}
+
+function loadPage(target: BrowserWindow, page: string): void {
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (devUrl) void target.loadURL(`${devUrl}/${page}`)
+  else void target.loadFile(join(__dirname, '../renderer', page))
+}
+
+function openSettings(): void {
+  if (settingsWin) {
+    settingsWin.focus()
+    return
+  }
+  settingsWin = new BrowserWindow({
+    width: 520,
+    height: 640,
+    title: 'Desktop Companion Settings',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+  loadPage(settingsWin, 'settings.html')
+  settingsWin.on('closed', () => (settingsWin = null))
+}
+
+function openChat(): void {
+  if (!win) return
+  win.focus()
+  win.webContents.send(IPC.openChat)
 }
 
 function findDefaultModel(): string | null {
@@ -100,6 +135,8 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
+      { label: 'Talk (Ctrl+Shift+Space)', click: openChat },
+      { label: 'Settings…', click: openSettings },
       { label: 'Load VRM character…', click: () => void pickModel() },
       { type: 'separator' },
       { label: 'Quit', click: () => app.quit() }
@@ -117,9 +154,21 @@ ipcMain.handle(IPC.getInitialModel, () => {
   return path ? { data: toArrayBuffer(readFileSync(path)), name: basename(path) } : null
 })
 
+ipcMain.handle(IPC.chat, (_e, text: string) => chat(String(text).slice(0, 2000)))
+ipcMain.handle(IPC.getSettings, () => getPublicSettings())
+ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
+  const before = getSettings().personaId
+  saveSettings(next)
+  if (next.personaId !== before) win?.webContents.send(IPC.personaChanged, next.personaId)
+})
+ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => setApiKey(provider, key))
+ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
+ipcMain.on(IPC.openSettings, openSettings)
+
 app.whenReady().then(() => {
   createWindow()
   createTray()
+  globalShortcut.register(CHAT_HOTKEY, openChat)
   for (const evt of ['display-metrics-changed', 'display-added', 'display-removed'] as const) {
     screen.on(evt as 'display-added', () => {
       if (!win) return
@@ -129,4 +178,6 @@ app.whenReady().then(() => {
   }
 })
 
+app.on('will-quit', () => globalShortcut.unregisterAll())
+// The overlay is the app; closing the settings window shouldn't quit.
 app.on('window-all-closed', () => app.quit())

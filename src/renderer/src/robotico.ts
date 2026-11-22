@@ -4,6 +4,7 @@
 // floating hands.
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import type { Emotion } from '@shared/personas'
 import type { Character } from './character'
 import { breath } from './idle'
 
@@ -58,6 +59,14 @@ export function createRobotico(): Character {
     eyes.push(eye)
   }
 
+  // Pink cheeks, shown when flustered.
+  const blushMat = new THREE.MeshBasicMaterial({ color: 0xff7aa8, transparent: true, opacity: 0 })
+  for (const x of [-0.17, 0.17]) {
+    const cheek = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.035, 0.01, 2, 0.015), blushMat)
+    cheek.position.set(x, -0.07, 0.226)
+    head.add(cheek)
+  }
+
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), trim)
   antenna.position.y = 0.3
   head.add(antenna)
@@ -72,6 +81,20 @@ export function createRobotico(): Character {
     body.add(hand)
     hands.push(hand)
   }
+
+  // Eye shape per emotion: [scaleY, rotation (inward tilt), y offset, colour].
+  const EYE_SHAPES: Record<Emotion, { sy: number; tilt: number; dy: number; color: number; bigger?: boolean }> = {
+    neutral: { sy: 1, tilt: 0, dy: 0, color: TEAL },
+    happy: { sy: 0.4, tilt: 0, dy: 0.02, color: TEAL },
+    angry: { sy: 0.7, tilt: 0.45, dy: 0, color: 0xff5a4e },
+    sad: { sy: 0.75, tilt: -0.4, dy: -0.02, color: 0x6aa8ff },
+    surprised: { sy: 1.25, tilt: 0, dy: 0.01, color: TEAL, bigger: true },
+    flustered: { sy: 0.5, tilt: -0.15, dy: 0, color: 0xff8fb8 },
+    smug: { sy: 0.45, tilt: 0.2, dy: 0, color: TEAL },
+    sleepy: { sy: 0.25, tilt: 0, dy: -0.02, color: TEAL }
+  }
+  let emotion: Emotion = 'neutral'
+  let blink = 0
 
   const headTarget = new THREE.Euler()
   let waveUntil = 0
@@ -89,10 +112,26 @@ export function createRobotico(): Character {
       headTarget.x = THREE.MathUtils.clamp(-Math.atan2(dir.y, Math.max(0.3, dir.z)), -0.35, 0.35)
     },
     setBlink(amount) {
-      for (const e of eyes) e.scale.y = Math.max(0.08, 1 - amount)
+      blink = amount
+    },
+    setEmotion(next) {
+      emotion = next
     },
     update(dt, time) {
       clock = time
+      const shape = EYE_SHAPES[emotion]
+      const ek = 1 - Math.exp(-dt * 12)
+      eyes.forEach((e, i) => {
+        const side = i === 0 ? -1 : 1
+        const targetSy = Math.max(0.08, shape.sy * (1 - blink))
+        e.scale.y += (targetSy - e.scale.y) * ek
+        const s = shape.bigger ? 1.25 : 1
+        e.scale.x += (s - e.scale.x) * ek
+        e.rotation.z += (side * -shape.tilt - e.rotation.z) * ek
+        e.position.y += (0.02 + shape.dy - e.position.y) * ek
+      })
+      eyeMat.color.lerp(new THREE.Color(shape.color), ek)
+      blushMat.opacity += ((emotion === 'flustered' ? 0.9 : 0) - blushMat.opacity) * ek
       const b = breath(time)
       body.position.y = 0.02 + b * 0.012
       const k = 1 - Math.exp(-dt * 8)
@@ -117,7 +156,7 @@ export function createRobotico(): Character {
       root.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose()
       })
-      for (const m of [plastic, trim, screenMat, eyeMat, glowMat]) m.dispose()
+      for (const m of [plastic, trim, screenMat, eyeMat, glowMat, blushMat]) m.dispose()
     }
   }
 }
