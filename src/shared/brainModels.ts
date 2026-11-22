@@ -1,5 +1,5 @@
 // Which model the built-in brain runs. "auto" picks the smartest one the PC can
-// handle: Qwen3 4B on a graphics card, Qwen3 1.7B on the processor. Both are
+// handle: Qwen3 4B on a graphics card, Qwen3 0.6B on the processor. Both are
 // Apache-2.0 (free for commercial use, no extra terms).
 // Pure code, no Electron or browser imports, so it can be tested.
 import { COPIED_MARKER } from './clipboard'
@@ -8,9 +8,15 @@ import { wantsDetail } from './brevity'
 export const BRAIN_AUTO = 'auto'
 /** Smartest: for PCs with a graphics card (WebGPU). About 2.5 GB, needs ~4 GB of video memory. */
 export const BRAIN_LARGE = 'onnx-community/Qwen3-4B-ONNX'
-/** For PCs without a usable graphics card. About 1.2 GB. */
+/** Second choice on a graphics card. */
 export const BRAIN_MEDIUM = 'onnx-community/Qwen3-1.7B-ONNX'
-/** Last resort: the old, small brain. About 1 GB. */
+/**
+ * For PCs without a usable graphics card. The processor engine has a hard
+ * memory cap (4 GB for the model file and its working memory together), and
+ * bigger brains run out of memory ("std::bad_alloc"), so this is the largest that fits.
+ */
+export const BRAIN_CPU = 'onnx-community/Qwen3-0.6B-ONNX'
+/** The old default. Saved settings that name it now mean "auto". */
 export const BRAIN_SMALL = 'onnx-community/gemma-3-1b-it-ONNX'
 
 /** Older defaults that people may have saved. They now mean "auto". */
@@ -45,8 +51,7 @@ export function brainCandidates(requested: string, hasGpu: boolean, failed: stri
               { model: BRAIN_MEDIUM, device: 'gpu' as const }
             ]
           : []),
-        { model: BRAIN_MEDIUM, device: 'cpu' },
-        { model: BRAIN_SMALL, device: 'cpu' }
+        { model: BRAIN_CPU, device: 'cpu' }
       ]
   const left = list.filter((c) => !failed.includes(choiceKey(c)))
   // If everything failed before, try the safest one again rather than nothing.

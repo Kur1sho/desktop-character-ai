@@ -3,6 +3,7 @@ import {
   BRAIN_LARGE,
   BRAIN_MEDIUM,
   BRAIN_SMALL,
+  BRAIN_CPU,
   brainCandidates,
   choiceKey,
   type BrainChoice,
@@ -20,18 +21,18 @@ const cpu = (model: string) => ({ model, device: 'cpu' })
 
 describe('brainCandidates', () => {
   it('tries the 4B brain on a graphics card, then steps down to the processor', () => {
-    expect(brainCandidates('auto', true)).toEqual([gpu(BRAIN_LARGE), gpu(BRAIN_MEDIUM), cpu(BRAIN_MEDIUM), cpu(BRAIN_SMALL)])
+    expect(brainCandidates('auto', true)).toEqual([gpu(BRAIN_LARGE), gpu(BRAIN_MEDIUM), cpu(BRAIN_CPU)])
   })
-  it('uses the 1.7B brain on the processor when there is no graphics card', () => {
-    expect(brainCandidates('', false)).toEqual([cpu(BRAIN_MEDIUM), cpu(BRAIN_SMALL)])
+  it('uses the 0.6B brain on the processor when there is no graphics card', () => {
+    expect(brainCandidates('', false)).toEqual([cpu(BRAIN_CPU)])
   })
   it('skips brains that already failed on this PC (integrated graphics)', () => {
     const failed = [choiceKey(gpu(BRAIN_LARGE) as BrainChoice), choiceKey(gpu(BRAIN_MEDIUM) as BrainChoice)]
-    expect(brainCandidates('auto', true, failed)[0]).toEqual(cpu(BRAIN_MEDIUM))
+    expect(brainCandidates('auto', true, failed)[0]).toEqual(cpu(BRAIN_CPU))
   })
   it('still tries the safest brain if everything failed before', () => {
     const all = brainCandidates('auto', true).map(choiceKey)
-    expect(brainCandidates('auto', true, all)).toEqual([cpu(BRAIN_SMALL)])
+    expect(brainCandidates('auto', true, all)).toEqual([cpu(BRAIN_CPU)])
   })
   it('treats the old saved default as auto', () => {
     expect(brainCandidates(BRAIN_SMALL, true)[0]).toEqual(gpu(BRAIN_LARGE))
