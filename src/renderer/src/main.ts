@@ -72,14 +72,47 @@ function feel(e: Emotion): void {
 }
 let settings: Settings = { ...DEFAULT_SETTINGS }
 
-/** Sends a message to whichever AI is chosen. The built-in brain runs right here. */
+/**
+ * Which engine runs the built-in brain: 'native' is llama.cpp in its own process
+ * (bigger, faster brains); 'web' is the in-window fallback for PCs where llama.cpp can't run.
+ */
+let brainMode: 'native' | 'web' | null = null
+let brainProgress: ((pct: number) => void) | null = null
+api?.onBrainProgress((pct) => brainProgress?.(pct))
+
+/** Downloads (first time only) and loads the built-in brain. */
+async function warmBrain(onProgress?: (pct: number) => void): Promise<void> {
+  if (!api) return
+  brainProgress = onProgress ?? null
+  try {
+    const r = await api.brainWarmUp()
+    brainMode = r.mode
+    if (r.mode === 'web') return warmUp(modelFor(settings), onProgress)
+    if (r.error) throw new Error(r.error)
+  } finally {
+    brainProgress = null
+  }
+}
+
+/** Sends a message to whichever AI is chosen. */
 async function ask(text: string, opts?: AskOptions): Promise<ChatReply> {
   if (!api) throw new Error('No app bridge')
   if (settings.provider !== 'builtin') return api.chat(text, opts)
+  if (brainMode === null) {
+    try {
+      await warmBrain((pct) => chat.status(`Downloading my brain (one time only)… ${pct}%`))
+    } catch (err) {
+      return { emotion: 'sad', text: err instanceof Error ? err.message : String(err), error: true }
+    }
+  }
+  // llama.cpp runs in the main process side, which also keeps the history.
+  if (brainMode === 'native') return api.chat(text, opts)
   const { system, history } = await api.chatPrepare(text, opts)
   try {
-    const raw = await think(modelFor(settings), [{ role: 'system', content: system }, ...history], (pct) =>
-      chat.status(`Downloading my brain (one time only)… ${pct}%`),
+    const raw = await think(
+      modelFor(settings),
+      [{ role: 'system', content: system }, ...history],
+      (pct) => chat.status(`Downloading my brain (one time only)… ${pct}%`),
       maxTokensFor(text)
     )
     const short = shortenReply(raw, text)
@@ -167,7 +200,7 @@ async function refreshSettings(): Promise<void> {
   }
   const jobs = [track((p) => preloadStt(settings.sttSize, 'command', p))]
   if (settings.wakeWord) jobs.push(track((p) => preloadStt('tiny', 'wake', p)))
-  if (settings.provider === 'builtin') jobs.push(track((p) => warmUp(modelFor(settings), p)))
+  if (settings.provider === 'builtin') jobs.push(track((p) => warmBrain(p)))
   if (!settings.setupDone) void runSetup(jobs)
   else for (const j of jobs) j.catch((err: Error) => console.error('Preload failed:', err.message))
 

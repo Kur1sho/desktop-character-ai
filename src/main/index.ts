@@ -23,6 +23,7 @@ import { activityLogPath, runAction } from './actions/runner'
 import { conversationLogPath, logConversation } from './conversationLog'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
+import { nativeBrainAvailable, stopNativeBrain, warmUpNativeBrain } from './brain/nativeBrain'
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -223,6 +224,15 @@ ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.readClipboard, async () => String(await clipboard.readText()).slice(0, 4000))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
+ipcMain.handle(IPC.brainWarmUp, async () => {
+  if (!(await nativeBrainAvailable())) return { mode: 'web' }
+  try {
+    await warmUpNativeBrain((pct) => win?.webContents.send(IPC.brainProgress, pct))
+    return { mode: 'native' }
+  } catch (err) {
+    return { mode: 'native', error: err instanceof Error ? err.message : String(err) }
+  }
+})
 ipcMain.on(IPC.logConversation, (_e, line: unknown) => logConversation(String(line)))
 ipcMain.on(IPC.openConversationLog, () => openLog(conversationLogPath()))
 
@@ -285,6 +295,9 @@ app.whenReady().then(() => {
   }
 })
 
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  stopNativeBrain()
+})
 // The overlay is the app; closing the settings window shouldn't quit.
 app.on('window-all-closed', () => app.quit())
