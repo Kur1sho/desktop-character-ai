@@ -6,6 +6,7 @@ import {
   brainCandidates,
   choiceKey,
   type BrainChoice,
+  isGpuError,
   isNetworkError,
   isThinkingModel,
   maxTokensFor,
@@ -61,4 +62,13 @@ describe('maxTokensFor', () => {
 it('spots network errors', () => {
   expect(isNetworkError('Failed to fetch')).toBe(true)
   expect(isNetworkError('WebGPU out of memory')).toBe(false)
+})
+
+it('spots the graphics chip crashing mid-reply', () => {
+  expect(
+    isGpuError(
+      "failed to call OrtRun(). ERROR_CODE: 1 ... Failed to execute 'mapAsync' on 'GPUBuffer': A valid external Instance reference no longer exists."
+    )
+  ).toBe(true)
+  expect(isGpuError('Unexpected token in JSON')).toBe(false)
 })

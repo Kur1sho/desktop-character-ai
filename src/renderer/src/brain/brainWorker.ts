@@ -5,6 +5,7 @@ import { pipeline, type TextGenerationPipeline } from '@huggingface/transformers
 import {
   brainCandidates,
   choiceKey,
+  isGpuError,
   isNetworkError,
   isThinkingModel,
   stripThinking,
@@ -26,6 +27,8 @@ type OutMsg =
   | { type: 'ready'; device: string; model: string }
   /** This model and device didn't work on this PC, so don't try it next time. */
   | { type: 'failed'; key: string }
+  /** The graphics chip crashed mid-reply: start a fresh worker and ask again. */
+  | { type: 'restart'; id: number; message: string }
   | { type: 'result'; id: number; text: string }
   | { type: 'error'; id?: number; message: string }
 
@@ -34,6 +37,7 @@ const post = (m: OutMsg) => (self as unknown as Worker).postMessage(m)
 interface Loaded {
   gen: TextGenerationPipeline
   model: string
+  choice: BrainChoice
 }
 let loading: Promise<Loaded> | null = null
 let requestedModel = ''
@@ -109,7 +113,7 @@ function load(model: string, failed: string[] = []): Promise<Loaded> {
       try {
         const gen = await withStrayErrors(loadOne(choice))
         post({ type: 'ready', device: choice.device, model: choice.model })
-        return { gen, model: choice.model }
+        return { gen, model: choice.model, choice }
       } catch (err) {
         lastErr = err
         const message = err instanceof Error ? err.message : String(err)
@@ -135,8 +139,11 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       post({ type: 'ready', device: '', model })
       return
     }
-    const { gen, model } = await load(msg.model, msg.failed)
-    const out = (await gen(msg.messages as never, {
+    const loaded = await load(msg.model, msg.failed)
+    const { gen, model } = loaded
+    let out
+    try {
+      out = (await gen(msg.messages as never, {
       max_new_tokens: msg.maxTokens ?? 100,
       do_sample: true,
       // Qwen's recommended settings for chat without thinking.
@@ -146,6 +153,18 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       repetition_penalty: 1.05,
       ...templateOpts(model)
     } as never)) as unknown as { generated_text: { role: string; content: string }[] | string }[]
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (loaded.choice.device === 'gpu' && isGpuError(message)) {
+        // The GPU is gone for this worker. Remember it, and let the page start
+        // a fresh worker, which will step down to the next brain.
+        console.warn(`Brain ${choiceKey(loaded.choice)} crashed mid-reply:`, message)
+        post({ type: 'failed', key: choiceKey(loaded.choice) })
+        post({ type: 'restart', id: msg.id, message })
+        return
+      }
+      throw err
+    }
     const g = out[0]?.generated_text
     const text = Array.isArray(g) ? (g.at(-1)?.content ?? '') : String(g ?? '')
     post({ type: 'result', id: msg.id, text: stripThinking(text) })

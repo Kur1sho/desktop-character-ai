@@ -77,3 +77,8 @@ export function maxTokensFor(userText: string): number {
 export function isNetworkError(message: string): boolean {
   return /fetch|network|ENOTFOUND|ERR_INTERNET|ERR_NAME|ERR_CONNECTION|timed? ?out/i.test(message)
 }
+
+/** The graphics chip gave up (out of memory, or the driver reset it). The processor will still work. */
+export function isGpuError(message: string): boolean {
+  return /webgpu|GPUBuffer|GPUDevice|mapAsync|device (was )?lost|external Instance|OrtRun/i.test(message)
+}

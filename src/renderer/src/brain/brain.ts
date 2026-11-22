@@ -1,9 +1,17 @@
 // Talks to the built-in brain worker.
+import { isGpuError } from '@shared/brainModels'
 
 let worker: Worker | null = null
 let nextId = 1
 const loads: { resolve: () => void; reject: (e: Error) => void }[] = []
-const pending = new Map<number, { resolve: (t: string) => void; reject: (e: Error) => void }>()
+interface Pending {
+  resolve: (t: string) => void
+  reject: (e: Error) => void
+  /** The request, so it can be asked again on a fresh worker. */
+  request: { type: 'generate'; id: number; model: string; maxTokens?: number; messages: { role: string; content: string }[] }
+  tries: number
+}
+const pending = new Map<number, Pending>()
 let progressCb: ((percent: number) => void) | null = null
 
 // Brains that didn't fit on this PC (e.g. too big for integrated graphics), so
@@ -32,7 +40,17 @@ function getWorker(): Worker {
     const m = e.data
     if (m.type === 'progress') progressCb?.(m.percent)
     else if (m.type === 'failed') rememberFailed(m.key)
-    else if (m.type === 'result') pending.get(m.id)?.resolve(m.text)
+    else if (m.type === 'restart') {
+      // The graphics chip crashed mid-reply. A new worker steps down to the next
+      // brain (it skips the one that just failed) and answers the same message.
+      const p = pending.get(m.id)
+      restartWorker()
+      if (p && p.tries < 3) {
+        p.tries++
+        getWorker().postMessage({ ...p.request, failed: failedBrains() })
+      } else p?.reject(new Error(friendly(m.message)))
+      return
+    } else if (m.type === 'result') pending.get(m.id)?.resolve(m.text)
     else if (m.type === 'ready') loads.splice(0).forEach((l) => l.resolve())
     else if (m.type === 'error') {
       if (m.id) pending.get(m.id)?.reject(new Error(friendly(m.message)))
@@ -44,6 +62,11 @@ function getWorker(): Worker {
     if (m.id) pending.delete(m.id)
   }
   return worker
+}
+
+function restartWorker(): void {
+  worker?.terminate()
+  worker = null
 }
 
 /** Starts downloading and loading the model in the background. Resolves once it's ready. */
@@ -64,14 +87,18 @@ export function think(
   progressCb = onProgress ?? null
   const id = nextId++
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject })
-    getWorker().postMessage({ type: 'generate', id, model, failed: failedBrains(), maxTokens, messages })
+    const request = { type: 'generate' as const, id, model, maxTokens, messages }
+    pending.set(id, { resolve, reject, request, tries: 0 })
+    getWorker().postMessage({ ...request, failed: failedBrains() })
   })
 }
 
 function friendly(message: string): string {
   if (/fetch|network|ENOTFOUND|ERR_/i.test(message)) {
     return "I couldn't download my brain. Check your internet (it's only needed the first time)."
+  }
+  if (isGpuError(message)) {
+    return 'My brain crashed your graphics chip. Restart me and I will use a lighter one.'
   }
   return message
 }
