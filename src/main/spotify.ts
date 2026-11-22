@@ -7,6 +7,7 @@
 import { shell } from 'electron'
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
+import { SPOTIFY_CLIENT_ID } from '../shared/connections'
 import { getSecret, getSettings, setSecret } from './settingsStore'
 
 export const SPOTIFY_REDIRECT = 'http://127.0.0.1:43821/callback'
@@ -17,6 +18,11 @@ const API = 'https://api.spotify.com/v1'
 let access: { token: string; expires: number } | null = null
 
 const base64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+/** The Client ID from Settings (for development), otherwise the app's built-in one. */
+export function spotifyClientId(): string {
+  return getSettings().spotifyClientId.trim() || SPOTIFY_CLIENT_ID
+}
 
 export function isSpotifyConnected(): boolean {
   return Boolean(getSecret('spotifyRefresh'))
@@ -47,6 +53,7 @@ async function tokenRequest(body: Record<string, string>): Promise<void> {
 /** Opens Spotify's sign-in page in the browser and waits for the user to approve. */
 export function connectSpotify(clientId: string): Promise<void> {
   const id = clientId.trim()
+  if (!id) return Promise.reject(new Error('Spotify isn\'t set up in this build yet. (Developer: add the Client ID in src/shared/connections.ts.)'))
   if (!/^[a-zA-Z0-9]{16,64}$/.test(id)) return Promise.reject(new Error('That doesn\'t look like a Spotify Client ID.'))
   const verifier = base64url(randomBytes(64))
   const challenge = base64url(createHash('sha256').update(verifier).digest())
@@ -112,7 +119,7 @@ export function connectSpotify(clientId: string): Promise<void> {
 async function token(): Promise<string> {
   if (access && Date.now() < access.expires) return access.token
   const refresh = getSecret('spotifyRefresh')
-  const clientId = getSettings().spotifyClientId
+  const clientId = spotifyClientId()
   if (!refresh || !clientId) throw new Error('Spotify isn\'t connected. Connect it in Settings.')
   await tokenRequest({ grant_type: 'refresh_token', refresh_token: refresh, client_id: clientId })
   return access!.token

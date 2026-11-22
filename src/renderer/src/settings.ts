@@ -25,7 +25,7 @@ const alwaysAllow = $<HTMLDivElement>('alwaysAllow')
 const alwaysAllowBox = $<HTMLDivElement>('alwaysAllowBox')
 const autoApprove = $<HTMLInputElement>('autoApprove')
 const spotifyState = $<HTMLParagraphElement>('spotifyState')
-const spotifySetup = $<HTMLDivElement>('spotifySetup')
+const spotifySetup = $<HTMLDetailsElement>('spotifySetup')
 const spotifyClientId = $<HTMLInputElement>('spotifyClientId')
 const spotifyConnect = $<HTMLButtonElement>('spotifyConnect')
 

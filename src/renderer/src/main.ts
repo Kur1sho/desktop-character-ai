@@ -138,7 +138,6 @@ async function refreshSettings(): Promise<void> {
   if (settings.wakeWord) jobs.push(track((p) => preloadStt('tiny', 'wake', p)))
   if (settings.provider === 'builtin') jobs.push(track((p) => warmUp(modelFor(settings), p)))
   if (!settings.setupDone) void runSetup(jobs)
-  else if (!settings.autoApproveAsked) void askAutoApprove()
   else for (const j of jobs) j.catch((err: Error) => console.error('Preload failed:', err.message))
 
   if (settings.wakeWord) {
@@ -195,27 +194,6 @@ async function runSetup(jobs: Promise<void>[]): Promise<void> {
       ? `All set! Just say "Hey ${name}" whenever you need me.`
       : 'All set! Press Ctrl+Shift+Space to talk to me.'
   )
-}
-
-/** Asked once: may the character do simple things without asking every time? */
-let askingApproval = false
-async function askAutoApprove(): Promise<void> {
-  if (askingApproval || setupRunning || !api) return
-  askingApproval = true
-  // Let "All set!" show first.
-  await new Promise((r) => setTimeout(r, settings.setupDone ? 1500 : 4000))
-  summon()
-  const { choice } = chat.confirm(
-    'Can I do simple things without asking you every time? Like opening apps, timers, searches and music. Websites will still ask. (You can change this in Settings.)',
-    false
-  )
-  const c = await choice
-  askingApproval = false
-  if (c === 'dismissed') return // ask again next time
-  const yes = c === 'allow'
-  settings = await api.getSettings()
-  await api.saveSettings({ ...settings, autoApprove: yes, autoApproveAsked: true })
-  chat.say(yes ? "Got it. I'll just do it." : "Okay, I'll always ask first.")
 }
 
 /** Stops talking and drops anything in progress, so a new request starts cleanly. */

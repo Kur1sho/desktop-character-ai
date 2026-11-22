@@ -5,13 +5,14 @@ import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
 import { activityLogPath, runAction } from './actions/runner'
-import { connectSpotify, disconnectSpotify } from './spotify'
+import { connectSpotify, disconnectSpotify, spotifyClientId } from './spotify'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsWin: BrowserWindow | null = null
+let welcomeWin: BrowserWindow | null = null
 
 const TALK_HOTKEY = 'CommandOrControl+Shift+Space'
 const TYPE_HOTKEY = 'CommandOrControl+Shift+T'
@@ -83,6 +84,28 @@ function openSettings(): void {
   settingsWin.on('closed', () => (settingsWin = null))
 }
 
+/** The welcome screen: one-click account connections and the "don't keep asking" switch. */
+function openWelcome(): void {
+  if (welcomeWin) {
+    welcomeWin.focus()
+    return
+  }
+  welcomeWin = new BrowserWindow({
+    width: 620,
+    height: 700,
+    title: 'Welcome',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+  loadPage(welcomeWin, 'welcome.html')
+  welcomeWin.on('closed', () => (welcomeWin = null))
+}
+
 function startListening(): void {
   if (!win) return
   win.webContents.send(IPC.listen)
@@ -145,6 +168,7 @@ function createTray(): void {
       { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
       { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
       { label: 'Type (Ctrl+Shift+T)', click: openChat },
+      { label: 'Connections…', click: openWelcome },
       { label: 'Settings…', click: openSettings },
       { label: 'Activity log', click: openActivityLog },
       { label: 'Load VRM character…', click: () => void pickModel() },
@@ -179,9 +203,10 @@ ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
 ipcMain.handle(IPC.spotifyConnect, async (_e, clientId: unknown) => {
-  const id = String(clientId ?? '').trim()
-  saveSettings({ ...getSettings(), spotifyClientId: id })
-  await connectSpotify(id)
+  // The welcome screen sends nothing (one click, using the app's own ID); Settings can pass one for development.
+  const given = String(clientId ?? '').trim()
+  if (given) saveSettings({ ...getSettings(), spotifyClientId: given })
+  await connectSpotify(spotifyClientId())
 })
 ipcMain.handle(IPC.spotifyDisconnect, () => disconnectSpotify())
 
@@ -199,6 +224,8 @@ ipcMain.on(IPC.openSettings, openSettings)
 app.whenReady().then(() => {
   createWindow()
   createTray()
+  // First launch (or never seen it): show the one-click connections screen.
+  if (!getSettings().autoApproveAsked) openWelcome()
   globalShortcut.register(TALK_HOTKEY, startListening)
   globalShortcut.register(TYPE_HOTKEY, openChat)
   // Only our own pages may use the microphone, and nothing else.
