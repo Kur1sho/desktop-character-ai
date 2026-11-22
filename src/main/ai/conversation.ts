@@ -15,7 +15,7 @@ import { maxTokensFor, stripThinking } from '../../shared/brainModels'
 import { nativeChat } from '../brain/nativeBrain'
 import { captureScreen, lookAndAnswer, type VisionStatus } from '../brain/vision'
 import { extractActions } from '../../shared/actions'
-import { SCREEN_MAX_TOKENS } from '../../shared/screen'
+import { SCREEN_MAX_TOKENS, screenChoice } from '../../shared/screen'
 import type { ChatReply } from '../../shared/ipc'
 
 const MAX_TURNS = 30
@@ -109,7 +109,7 @@ Don't use action tags here.`
 export async function lookAtScreen(userText: string, status: VisionStatus): Promise<ChatReply> {
   const persona = getPersona(getSettings().personaId)
   try {
-    const image = await captureScreen()
+    const image = await captureScreen(screenChoice(userText))
     const raw = await lookAndAnswer(systemPrompt(persona) + SEEING_RULES, userText, image, SCREEN_MAX_TOKENS, status)
     // Nothing the vision brain says gets to run actions.
     const said = extractActions(stripThinking(raw)).text
