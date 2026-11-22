@@ -536,6 +536,7 @@ renderer.setAnimationLoop(() => {
     chat.place(anchorX, window.innerHeight - top)
     character.lookAt(mouse)
     character.setBlink(blinkAmount(t))
+    character.setActivity?.(music ? 'dancing' : listening ? 'listening' : chat.isThinking() ? 'thinking' : 'idle')
     character.update(dt, t)
     danceFrame()
   }

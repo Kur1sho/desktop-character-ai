@@ -26,6 +26,10 @@ export interface Character {
   update(dt: number, time: number): void
   /** Show an emotion on the face until the next one. */
   setEmotion(emotion: Emotion): void
+  /** What the character is busy with (listening, thinking, dancing), for faces that can show it. */
+  setActivity?(activity: 'idle' | 'listening' | 'thinking' | 'dancing'): void
+  /** Pop up an emoji beside the head, if the character can. */
+  emote?(emoji: string): void
   /** 0 = mouth closed, 1 = wide open. Used for lip sync. */
   setMouth(open: number): void
   /** Play a short wave, used when summoned. */
