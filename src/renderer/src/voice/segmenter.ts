@@ -16,7 +16,7 @@ export interface SegmenterOptions {
 export class Segmenter {
   private readonly o: Required<SegmenterOptions>
   private noise = Infinity
-  private active = false
+  private isActive = false
   private loudFor = 0
   private quietFor = 0
   private phraseMs = 0
@@ -33,12 +33,27 @@ export class Segmenter {
     return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, base))
   }
 
+  /** True while a phrase is being collected. */
+  get active(): boolean {
+    return this.isActive
+  }
+
+  /** Length of the phrase so far, in ms (including pre-roll). */
+  get currentMs(): number {
+    return this.isActive ? this.phraseMs : 0
+  }
+
+  /** A copy of the phrase collected so far, for early checks while still talking. */
+  snapshot(): Float32Array | null {
+    return this.isActive ? concat(this.phrase) : null
+  }
+
   /** Feed one frame. Returns a finished phrase, or null. */
   push(samples: Float32Array, rms: number, frameMs: number): Float32Array | null {
     this.noise = rms < this.noise ? rms : this.noise * (1 + 0.0002 * frameMs)
     const loud = rms > this.threshold
 
-    if (!this.active) {
+    if (!this.isActive) {
       this.preRoll.push(samples)
       this.preRollMs += frameMs
       while (this.preRollMs > this.o.preRollMs && this.preRoll.length > 1) {
@@ -47,7 +62,7 @@ export class Segmenter {
       }
       this.loudFor = loud ? this.loudFor + frameMs : 0
       if (this.loudFor >= this.o.minSpeechMs) {
-        this.active = true
+        this.isActive = true
         this.phrase = [...this.preRoll]
         this.phraseMs = this.preRollMs
         this.quietFor = 0
@@ -62,7 +77,7 @@ export class Segmenter {
     this.quietFor = loud ? 0 : this.quietFor + frameMs
     if (this.quietFor >= this.o.endSilenceMs || this.phraseMs >= this.o.maxPhraseMs) {
       const out = concat(this.phrase)
-      this.active = false
+      this.isActive = false
       this.phrase = []
       this.loudFor = 0
       return out

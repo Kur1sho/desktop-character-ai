@@ -12,7 +12,8 @@ import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
 import { speak, stopSpeaking } from './voice/speaker'
-import { transcribe } from './voice/stt'
+import { preloadStt, transcribe } from './voice/stt'
+import { matchWakeWord } from './voice/wakeMatch'
 import { startWake, stopWake } from './voice/wake'
 
 declare global {
@@ -87,19 +88,22 @@ async function refreshSettings(): Promise<void> {
   settings = await api.getSettings()
   // Start fetching the built-in brain in the background so the first chat is quick.
   if (settings.provider === 'builtin') warmUp(modelFor(settings))
+  // Load the speech models now, so the first "Hey ..." or hotkey press is quick.
+  preloadStt(settings.sttSize)
   if (settings.wakeWord) {
+    preloadStt('tiny', 'wake')
     void startWake({
       name: () => getPersona(settings.personaId).name,
-      sttSize: () => settings.sttSize,
       isBusy: () => listening !== null || speaking || thinking,
-      onWake: (rest) => {
-        if (rest.split(' ').length >= 2) {
+      onWake: (rest, audio) => {
+        if (!audio && rest.split(' ').length >= 2) {
           // "Hey Robotico, how are you?" - the question came with the name.
           summon()
           thinking = true
           void chat.ask(rest).finally(() => (thinking = false))
         } else {
-          void startVoice()
+          // Start listening straight away, keeping what was already said.
+          void startVoice(audio)
         }
       },
       onError: (err) => console.error('Wake word:', err.message)
@@ -112,7 +116,7 @@ async function refreshSettings(): Promise<void> {
 // --- Voice: press the hotkey, talk, and it stops when you go quiet ---------
 let listening: Listening | null = null
 
-async function startVoice(): Promise<void> {
+async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
   if (listening) {
     listening.cancel() // pressing again cancels
     return
@@ -130,7 +134,7 @@ async function startVoice(): Promise<void> {
       lastBars = bars
       chat.status(`Listening… ${'▮'.repeat(bars)}${'▯'.repeat(5 - bars)}`)
     }
-  })
+  }, preRoll)
   try {
     const { audio, reason } = await listening.result
     listening = null
@@ -140,9 +144,12 @@ async function startVoice(): Promise<void> {
       return chat.say("I didn't hear anything. Is the right microphone set as default in Windows sound settings?")
     }
     chat.status('…')
-    const text = await transcribe(audio, settings.sttSize, (pct) =>
+    const heard = await transcribe(audio, settings.sttSize, (pct) =>
       chat.status(`Downloading my ears (one time only)… ${pct}%`)
     )
+    // If this started from the wake word, drop the "Hey <name>" part.
+    const wake = preRoll ? matchWakeWord(heard, getPersona(settings.personaId).name) : null
+    const text = wake?.matched && wake.rest ? wake.rest : heard
     if (!text || /^\[.*\]$/.test(text)) {
       character?.setEmotion('sad')
       return chat.say("Sorry, I didn't catch that.")
