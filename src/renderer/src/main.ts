@@ -1,11 +1,16 @@
 import * as THREE from 'three'
 import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
+import { getPersona } from '@shared/personas'
+import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
+import { listen, type Listening } from './voice/listener'
+import { speak, stopSpeaking } from './voice/speaker'
+import { transcribe } from './voice/stt'
 
 declare global {
   interface Window {
@@ -40,7 +45,59 @@ const stage = new THREE.Group()
 scene.add(stage)
 
 let character: Character | null = null
-const chat = createChat(api, (emotion) => character?.setEmotion(emotion))
+let settings: Settings = { ...DEFAULT_SETTINGS }
+const chat = createChat(
+  api,
+  (emotion) => character?.setEmotion(emotion),
+  (text) => {
+    if (settings.voiceOutput) {
+      void speak(text, getPersona(settings.personaId).voice, (open) => character?.setMouth(open))
+    }
+  }
+)
+
+async function refreshSettings(): Promise<void> {
+  if (api) settings = await api.getSettings()
+}
+
+// --- Voice: press the hotkey, talk, and it stops when you go quiet ---------
+let listening: Listening | null = null
+
+async function startVoice(): Promise<void> {
+  if (listening) {
+    listening.cancel() // pressing again cancels
+    return
+  }
+  stopSpeaking()
+  summon()
+  character?.setEmotion('neutral')
+  chat.status('Listening…')
+  listening = listen((_level, state) => {
+    if (state === 'speaking') character?.setEmotion('happy')
+  })
+  try {
+    const { audio, reason } = await listening.result
+    listening = null
+    if (reason === 'cancelled') return chat.hide()
+    if (!audio) {
+      character?.setEmotion('sad')
+      return chat.say("I didn't hear anything.")
+    }
+    chat.status('…')
+    const text = await transcribe(audio, settings.sttSize, (pct) =>
+      chat.status(`Downloading my ears (one time only)… ${pct}%`)
+    )
+    if (!text || /^\[.*\]$/.test(text)) {
+      character?.setEmotion('sad')
+      return chat.say("Sorry, I didn't catch that.")
+    }
+    await chat.ask(text)
+  } catch (err) {
+    listening = null
+    character?.setEmotion('sad')
+    chat.say(err instanceof Error ? err.message : String(err), { error: true })
+  }
+}
 let layout: Layout | null = null
 let anchorX = 0
 let popStart = -1
@@ -160,9 +217,13 @@ api?.onOpenChat(() => {
   summon()
   openChat()
 })
-api?.onPersonaChanged(() => {
+api?.onListen(() => void startVoice())
+api?.onPersonaChanged(async () => {
+  await refreshSettings()
   chat.say('…Hello? I feel different.')
 })
+api?.onSettingsChanged(() => void refreshSettings())
+void refreshSettings()
 api?.onLoadModel(async (data, name) => {
   try {
     setCharacter(await loadVrmCharacter(data))

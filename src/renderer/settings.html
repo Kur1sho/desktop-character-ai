@@ -63,6 +63,18 @@
       </div>
     </fieldset>
 
+    <fieldset>
+      <legend>Voice</legend>
+      <label><input id="voiceOutput" type="checkbox" style="width: auto; margin-right: 6px" />Speak replies out loud</label>
+      <label for="sttSize">Speech recognition accuracy</label>
+      <select id="sttSize">
+        <option value="tiny">Fast (smallest download, about 40 MB)</option>
+        <option value="base">Balanced (about 80 MB)</option>
+        <option value="small">Accurate (about 250 MB, needs a faster PC)</option>
+      </select>
+      <p class="hint">Press Ctrl+Shift+Space and talk. Speech is recognised on your PC; the model downloads once.</p>
+    </fieldset>
+
     <div class="actions">
       <span id="status"></span>
       <button class="primary" id="save">Save</button>

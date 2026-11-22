@@ -10,6 +10,11 @@ export interface ChatUi {
   place(x: number, y: number): void
   openInput(): void
   say(text: string, opts?: { error?: boolean }): void
+  /** Shows a message that stays until replaced (for "Listening…" and similar). */
+  status(text: string): void
+  hide(): void
+  /** Sends text to the character and shows the reply. */
+  ask(text: string): Promise<void>
 }
 
 /** Roughly how long to keep a reply on screen: 2.5s plus reading time. */
@@ -18,7 +23,11 @@ export function readingMs(text: string): number {
   return Math.min(15000, 2500 + words * 320)
 }
 
-export function createChat(api: CompanionApi | undefined, onEmotion: (e: Emotion) => void): ChatUi {
+export function createChat(
+  api: CompanionApi | undefined,
+  onEmotion: (e: Emotion) => void,
+  onReply: (text: string) => void = () => {}
+): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
   const input = document.getElementById('input') as HTMLInputElement
@@ -50,7 +59,27 @@ export function createChat(api: CompanionApi | undefined, onEmotion: (e: Emotion
     input.blur()
   }
 
-  input.addEventListener('keydown', async (e) => {
+  async function ask(text: string): Promise<void> {
+    if (!api) {
+      show('(Running outside the app, so there is no AI to talk to.)', 4000, true)
+      return
+    }
+    if (busy) return
+    busy = true
+    thinking()
+    try {
+      const reply = await api.chat(text)
+      onEmotion(reply.emotion)
+      show(reply.text || '…', readingMs(reply.text), Boolean(reply.error))
+      if (!reply.error && reply.text) onReply(reply.text)
+    } catch (err) {
+      show(String(err), 6000, true)
+    } finally {
+      busy = false
+    }
+  }
+
+  input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeInput()
       return
@@ -59,21 +88,7 @@ export function createChat(api: CompanionApi | undefined, onEmotion: (e: Emotion
     const text = input.value.trim()
     if (!text) return
     input.value = ''
-    if (!api) {
-      show('(Running outside the app, so there is no AI to talk to.)', 4000, true)
-      return
-    }
-    busy = true
-    thinking()
-    try {
-      const reply = await api.chat(text)
-      onEmotion(reply.emotion)
-      show(reply.text || '…', readingMs(reply.text), Boolean(reply.error))
-    } catch (err) {
-      show(String(err), 6000, true)
-    } finally {
-      busy = false
-    }
+    void ask(text)
   })
 
   return {
@@ -89,6 +104,11 @@ export function createChat(api: CompanionApi | undefined, onEmotion: (e: Emotion
     },
     say(text, opts) {
       show(text, readingMs(text), opts?.error)
-    }
+    },
+    status(text) {
+      show(text, null)
+    },
+    hide,
+    ask
   }
 }

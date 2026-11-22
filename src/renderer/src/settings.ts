@@ -16,6 +16,8 @@ const keyBox = $<HTMLDivElement>('keyBox')
 const key = $<HTMLInputElement>('key')
 const keyHint = $<HTMLParagraphElement>('keyHint')
 const status = $<HTMLSpanElement>('status')
+const voiceOutput = $<HTMLInputElement>('voiceOutput')
+const sttSize = $<HTMLSelectElement>('sttSize')
 
 let current: PublicSettings
 
@@ -41,6 +43,8 @@ function render(): void {
   key.value = ''
   key.placeholder = current.hasKey[current.provider] ? 'Saved (hidden). Paste a new one to replace it.' : 'Paste your key'
   keyHint.textContent = info.keyUrl ? `Get a key at ${info.keyUrl}` : ''
+  voiceOutput.checked = current.voiceOutput
+  sttSize.value = current.sttSize
 }
 
 persona.addEventListener('change', () => {
@@ -53,6 +57,12 @@ provider.addEventListener('change', () => {
 })
 model.addEventListener('input', () => {
   current.models[current.provider] = model.value
+})
+voiceOutput.addEventListener('change', () => {
+  current.voiceOutput = voiceOutput.checked
+})
+sttSize.addEventListener('change', () => {
+  current.sttSize = sttSize.value as typeof current.sttSize
 })
 ollamaUrl.addEventListener('input', () => {
   current.ollamaUrl = ollamaUrl.value

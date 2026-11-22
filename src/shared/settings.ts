@@ -58,6 +58,10 @@ export interface Settings {
   /** Model name per provider, so switching back and forth keeps your choice. */
   models: Partial<Record<ProviderId, string>>
   ollamaUrl: string
+  /** Speak replies out loud. */
+  voiceOutput: boolean
+  /** Speech recognition model size: bigger is more accurate but slower. */
+  sttSize: 'tiny' | 'base' | 'small'
 }
 
 /** What the settings screen sees. Keys never leave the main process; only whether one is saved. */
@@ -69,7 +73,9 @@ export const DEFAULT_SETTINGS: Settings = {
   personaId: 'robotico',
   provider: 'ollama',
   models: {},
-  ollamaUrl: 'http://127.0.0.1:11434'
+  ollamaUrl: 'http://127.0.0.1:11434',
+  voiceOutput: true,
+  sttSize: 'base'
 }
 
 export function modelFor(settings: Settings): string {

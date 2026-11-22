@@ -15,9 +15,10 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 - Idle life: breathing, blinking, and the head follows your mouse
 - Drag the character left and right along the taskbar
 - Double-click the character, or click the tray icon, to summon it again
-- **Talk to it**: click the character (or press Ctrl+Shift+Space) and type. It answers in a speech bubble, in character, with matching facial expressions
+- **Talk to it**: click the character (or press Ctrl+Shift+T) and type. It answers in a speech bubble, in character, with matching facial expressions
 - Two personalities: **Robotico** (deadpan robot) and **Suzu** (tsundere, placeholder name)
 - Choose the AI in Settings (tray menu): local **Ollama** (free, private), or your own key for **Claude**, **OpenAI**, **OpenRouter** or **Gemini**
+- **Voice**: press **Ctrl+Shift+Space** and talk. It stops listening when you go quiet, works out what you said on your PC (Whisper, downloaded once), and answers out loud with a voice tuned to each character, with lip sync. Ctrl+Shift+T opens the text box
 - Keys are encrypted with Windows' own protection and never shown again; chat history is stored only on your PC, with a button to wipe it
 
 ## Running it on Windows

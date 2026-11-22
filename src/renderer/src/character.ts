@@ -15,6 +15,8 @@ export interface Character {
   update(dt: number, time: number): void
   /** Show an emotion on the face until the next one. */
   setEmotion(emotion: Emotion): void
+  /** 0 = mouth closed, 1 = wide open. Used for lip sync. */
+  setMouth(open: number): void
   /** Play a short wave, used when summoned. */
   wave(): void
   dispose(): void

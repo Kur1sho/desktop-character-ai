@@ -71,6 +71,9 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
     setEmotion(next) {
       emotion = next
     },
+    setMouth(open) {
+      vrm.expressionManager?.setValue('aa', open * 0.8)
+    },
     update(dt, time) {
       clock = time
       const b = breath(time)

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, Tray } from 'electron'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { computeLayout } from '../shared/layout'
@@ -11,7 +11,8 @@ let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsWin: BrowserWindow | null = null
 
-const CHAT_HOTKEY = 'CommandOrControl+Shift+Space'
+const TALK_HOTKEY = 'CommandOrControl+Shift+Space'
+const TYPE_HOTKEY = 'CommandOrControl+Shift+T'
 
 // Only one copy of the companion should ever run.
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -80,6 +81,11 @@ function openSettings(): void {
   settingsWin.on('closed', () => (settingsWin = null))
 }
 
+function startListening(): void {
+  if (!win) return
+  win.webContents.send(IPC.listen)
+}
+
 function openChat(): void {
   if (!win) return
   win.focus()
@@ -135,7 +141,8 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
-      { label: 'Talk (Ctrl+Shift+Space)', click: openChat },
+      { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
+      { label: 'Type (Ctrl+Shift+T)', click: openChat },
       { label: 'Settings…', click: openSettings },
       { label: 'Load VRM character…', click: () => void pickModel() },
       { type: 'separator' },
@@ -159,6 +166,7 @@ ipcMain.handle(IPC.getSettings, () => getPublicSettings())
 ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
   const before = getSettings().personaId
   saveSettings(next)
+  win?.webContents.send(IPC.settingsChanged)
   if (next.personaId !== before) win?.webContents.send(IPC.personaChanged, next.personaId)
 })
 ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => setApiKey(provider, key))
@@ -168,7 +176,13 @@ ipcMain.on(IPC.openSettings, openSettings)
 app.whenReady().then(() => {
   createWindow()
   createTray()
-  globalShortcut.register(CHAT_HOTKEY, openChat)
+  globalShortcut.register(TALK_HOTKEY, startListening)
+  globalShortcut.register(TYPE_HOTKEY, openChat)
+  // Only our own pages may use the microphone, and nothing else.
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+    callback(permission === 'media' && wc === win?.webContents)
+  })
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && wc === win?.webContents)
   for (const evt of ['display-metrics-changed', 'display-added', 'display-removed'] as const) {
     screen.on(evt as 'display-added', () => {
       if (!win) return
