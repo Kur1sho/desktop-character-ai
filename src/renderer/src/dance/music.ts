@@ -3,9 +3,16 @@
 // on this PC: it isn't recorded, kept or sent anywhere.
 import { BeatTracker, type BeatState } from './beat'
 
+export interface MusicFrame extends BeatState {
+  /** How bright the sound is (spectral centroid, Hz): high for energetic, treble-heavy music. */
+  centroid: number
+  /** Any drum hit on this frame, hi-hats and snares included (for how busy the music is). */
+  hit: boolean
+}
+
 export interface MusicListener {
   /** Call every animation frame. */
-  read(nowMs: number): BeatState
+  read(nowMs: number): MusicFrame
   stop(): void
 }
 
@@ -28,13 +35,29 @@ export async function listenToMusic(): Promise<MusicListener> {
   const lo = Math.max(1, Math.floor(40 / hz))
   const hi = Math.max(lo + 1, Math.ceil(150 / hz))
   const tracker = new BeatTracker()
+  // A second tracker on the change across the whole spectrum ("spectral flux")
+  // hears every hit, not just the kick, so busy songs are known to be busy.
+  const hits = new BeatTracker()
+  const prev = new Float32Array(analyser.frequencyBinCount)
 
   return {
     read(nowMs) {
       analyser.getFloatFrequencyData(bins)
-      let sum = 0
-      for (let i = lo; i <= hi; i++) sum += Math.pow(10, bins[i] / 20) // dB to amplitude
-      return tracker.push(sum / (hi - lo + 1), nowMs)
+      let bass = 0
+      let weighted = 0
+      let total = 0
+      let flux = 0
+      for (let i = 1; i < bins.length; i++) {
+        const amp = Math.pow(10, bins[i] / 20) // dB to amplitude
+        if (i >= lo && i <= hi) bass += amp
+        weighted += amp * i * hz
+        total += amp
+        if (amp > prev[i]) flux += amp - prev[i]
+        prev[i] = amp
+      }
+      const state = tracker.push(bass / (hi - lo + 1), nowMs)
+      const hit = hits.push(total > 0 ? flux / bins.length : 0, nowMs).onset
+      return { ...state, centroid: total > 0 ? weighted / total : 0, hit }
     },
     stop() {
       stream.getTracks().forEach((t) => t.stop())

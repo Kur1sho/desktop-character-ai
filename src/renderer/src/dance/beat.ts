@@ -10,6 +10,8 @@
 export interface BeatState {
   /** A beat happened on this frame. */
   beat: boolean
+  /** A drum hit was heard on this frame (for how busy the music is). */
+  onset: boolean
   /** How far through the current beat, 0 (on the beat) to 1 (just before the next). */
   phase: number
   /** Beats counted since music started, for alternating moves. */
@@ -37,6 +39,12 @@ export function foldBpm(bpm: number): number {
   return b
 }
 
+/** How likely a tempo is in dance music: highest at 120, halving about every octave and a half. */
+function prior(bpm: number): number {
+  const octaves = Math.log2(bpm / 120)
+  return Math.exp(-0.5 * (octaves / 0.6) ** 2)
+}
+
 /** The most common tempo in a list of onset times (ms), or null. */
 export function estimateBpm(onsets: number[]): number | null {
   if (onsets.length < 4) return null
@@ -46,12 +54,16 @@ export function estimateBpm(onsets: number[]): number | null {
       const gap = onsets[j] - onsets[i]
       if (gap < MIN_GAP_MS || gap > 2000) continue
       const bpm = foldBpm(60000 / gap)
-      // Closer neighbours count more; spread each vote over nearby tempos.
-      const weight = 1 / (j - i)
+      // Closer neighbours count more, and tempos near 120 are likelier: without
+      // that, a 150 BPM song whose every-other-kick gaps say "75" reads as slow.
+      const weight = prior(bpm) / (j - i)
+      // Spread each vote over nearby tempos, wider for fast ones, since the same
+      // timing wobble moves a fast tempo further.
       const b = Math.round(bpm)
-      for (let d = -2; d <= 2; d++) {
+      const w = Math.max(2, Math.round(bpm * 0.03))
+      for (let d = -w; d <= w; d++) {
         const k = b + d
-        if (k >= MIN_BPM && k <= MAX_BPM) votes[k] += weight * (1 - Math.abs(d) / 3)
+        if (k >= MIN_BPM && k <= MAX_BPM) votes[k] += weight * (1 - Math.abs(d) / (w + 1))
       }
     }
   }
@@ -126,6 +138,6 @@ export class BeatTracker {
     }
 
     const silentForMs = t - (Number.isFinite(this.lastLoud) ? this.lastLoud : this.started)
-    return { beat, phase, count: this.count, bpm: this.bpm, intensity: Math.min(1, this.level), silentForMs }
+    return { beat, onset, phase, count: this.count, bpm: this.bpm, intensity: Math.min(1, this.level), silentForMs }
   }
 }

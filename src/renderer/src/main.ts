@@ -10,6 +10,7 @@ import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
 import { listenToMusic, type MusicListener } from './dance/music'
+import { approachAngle, Choreographer, MoodTracker, type Mood, type Pose } from './dance/choreo'
 import { parseDanceCommand } from '@shared/actions'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
@@ -49,9 +50,17 @@ scene.add(sun)
 
 // The stage holds the character and is positioned at the anchor point.
 const stage = new THREE.Group()
-/** Holds the character; bounces and sways when dancing. */
+/** Moves the character around when dancing (in pixels from its spot). */
 const dancer = new THREE.Group()
 stage.add(dancer)
+/** Turns the character around its middle, for flips and spins. */
+const pivot = new THREE.Group()
+pivot.position.y = CHARACTER_PX / 2
+dancer.add(pivot)
+/** Puts the character's feet back at the bottom, under the pivot. */
+const body = new THREE.Group()
+body.position.y = -CHARACTER_PX / 2
+pivot.add(body)
 scene.add(stage)
 
 let character: Character | null = null
@@ -210,6 +219,9 @@ async function runSetup(jobs: Promise<void>[]): Promise<void> {
 
 // --- Dancing to whatever the PC is playing -----------------------------------
 let music: MusicListener | null = null
+const moodTracker = new MoodTracker()
+const choreographer = new Choreographer()
+let lastMood: Mood | null = null
 let danceStartedAt = 0
 
 async function startDancing(): Promise<void> {
@@ -236,7 +248,7 @@ function stopDancing(announce: boolean, line?: string): void {
   music.stop()
   music = null
   dancer.position.set(0, 0, 0)
-  dancer.rotation.set(0, 0, 0)
+  pivot.rotation.set(0, 0, 0)
   character?.dance(null)
   if (announce) {
     const text = line ?? getPersona(settings.personaId).lines.danceStop
@@ -245,7 +257,7 @@ function stopDancing(announce: boolean, line?: string): void {
   }
 }
 
-/** One frame of dancing: reads the beat and moves the character. */
+/** One frame of dancing: reads the music, picks moves to match its mood and moves the character. */
 function danceFrame(): void {
   if (!music || !character) return
   const now = performance.now()
@@ -256,17 +268,26 @@ function danceFrame(): void {
     stopDancing(true, s.bpm ? lines.danceStop : lines.noMusic)
     return
   }
+  const mood = moodTracker.push(now, s.hit, s.bpm, s.centroid)
+  if (mood !== lastMood) {
+    lastMood = mood
+    character.setEmotion(mood === 'hype' ? 'happy' : mood === 'chill' ? 'sleepy' : 'neutral')
+  }
+  let target: Pose
   if (!s.bpm) {
     // Still working out the beat: a gentle sway so it's clearly listening.
-    dancer.rotation.z = Math.sin(now / 400) * 0.03
-    character.dance(null)
-    return
+    target = { x: 0, y: 0, rotX: 0, rotY: 0, rotZ: Math.sin(now / 400) * 0.04, arms: 'low' }
+  } else {
+    target = choreographer.pose(s.count + s.phase, mood, CHARACTER_PX, s.intensity)
   }
-  const hit = Math.pow(1 - s.phase, 2)
-  const energy = 0.5 + 0.5 * s.intensity
-  dancer.position.y = CHARACTER_PX * 0.035 * hit * energy
-  dancer.rotation.z = Math.sin((s.count + s.phase) * Math.PI) * 0.06 * energy
-  character.dance({ phase: s.phase, count: s.count, intensity: s.intensity })
+  // Ease toward the pose (angles the short way round), so moves blend into each other.
+  const k = 0.35
+  dancer.position.x += (target.x - dancer.position.x) * k
+  dancer.position.y += (target.y - dancer.position.y) * k
+  pivot.rotation.x = approachAngle(pivot.rotation.x, target.rotX, k)
+  pivot.rotation.y = approachAngle(pivot.rotation.y, target.rotY, k)
+  pivot.rotation.z = approachAngle(pivot.rotation.z, target.rotZ, k)
+  character.dance({ phase: s.phase, count: s.count, intensity: s.intensity, arms: target.arms })
 }
 
 /** Stops talking and drops anything in progress, so a new request starts cleanly. */
@@ -350,13 +371,13 @@ resize()
 
 function setCharacter(next: Character): void {
   if (character) {
-    dancer.remove(character.root)
+    body.remove(character.root)
     character.dispose()
   }
   character = next
   const scale = CHARACTER_PX / next.height
   next.root.scale.setScalar(scale)
-  dancer.add(next.root)
+  body.add(next.root)
   summon()
 }
 

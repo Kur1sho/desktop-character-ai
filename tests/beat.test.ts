@@ -25,6 +25,16 @@ describe('foldBpm / estimateBpm', () => {
     expect(estimateBpm(onsets)).toBeLessThanOrEqual(121)
     expect(estimateBpm([0, 500])).toBeNull()
   })
+  it("doesn't halve a fast tempo when the timing wobbles", () => {
+    let seed = 7
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    const onsets = Array.from({ length: 20 }, (_, i) => i * 400 + (rand() - 0.5) * 60) // 150 BPM, ±30 ms
+    expect(estimateBpm(onsets)).toBeGreaterThan(140)
+  })
+  it('keeps a genuinely slow song slow', () => {
+    const onsets = Array.from({ length: 10 }, (_, i) => i * 833) // 72 BPM
+    expect(estimateBpm(onsets)).toBeLessThan(80)
+  })
 })
 
 describe('BeatTracker', () => {

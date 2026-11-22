@@ -44,14 +44,33 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
   /** Arms swing up on the beat, alternating; hips twist; head nods. */
   function applyDance(move: DanceMove): void {
     const hit = Math.pow(1 - move.phase, 2)
+    const beat = move.count + move.phase
     const left = move.count % 2 === 0
-    const lift = (0.5 + 0.5 * move.intensity) * hit
-    if (leftUpperArm) leftUpperArm.rotation.z = -1.2 + (left ? 0.9 : 0.3) * lift
-    if (rightUpperArm) rightUpperArm.rotation.z = 1.2 - (left ? 0.3 : 0.9) * lift
-    if (leftLowerArm) leftLowerArm.rotation.z = -0.15 - 0.6 * lift
-    if (rightLowerArm) rightLowerArm.rotation.z = 0.15 + 0.6 * lift
-    if (spine) spine.rotation.y = Math.sin((move.count + move.phase) * Math.PI) * 0.15
-    if (neck) neck.rotation.x = 0.15 * hit
+    // Upper-arm angle from the side: 1.2 = down, 0 = straight out, negative = raised.
+    let l = 1.2
+    let r = 1.2
+    let bend = 0.15
+    if (move.arms === 'up') {
+      l = r = -0.9 + 0.1 * hit
+      bend = 0.3
+    } else if (move.arms === 'out') {
+      l = 0.05 + Math.sin(beat * Math.PI) * 0.12
+      r = 0.05 - Math.sin(beat * Math.PI) * 0.12
+    } else if (move.arms === 'low') {
+      l = 1.1 + Math.sin((beat * Math.PI) / 2) * 0.08
+      r = 1.1 - Math.sin((beat * Math.PI) / 2) * 0.08
+    } else {
+      const lift = (0.5 + 0.5 * move.intensity) * hit
+      l = 1.2 - (left ? 0.9 : 0.3) * lift
+      r = 1.2 - (left ? 0.3 : 0.9) * lift
+      bend = 0.15 + 0.6 * lift
+    }
+    if (leftUpperArm) leftUpperArm.rotation.z = -l
+    if (rightUpperArm) rightUpperArm.rotation.z = r
+    if (leftLowerArm) leftLowerArm.rotation.z = -bend
+    if (rightLowerArm) rightLowerArm.rotation.z = bend
+    if (spine) spine.rotation.y = Math.sin(beat * Math.PI) * (move.arms === 'low' ? 0.08 : 0.15)
+    if (neck) neck.rotation.x = (move.arms === 'low' ? 0.08 : 0.15) * hit
   }
 
   // VRM preset expressions for each emotion, with weights.
