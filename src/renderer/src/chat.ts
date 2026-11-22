@@ -2,6 +2,7 @@
 import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
 import { extractActions, parseIntent, wasRequested, type Action } from '@shared/actions'
+import { quickMath } from '@shared/quickMath'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -101,7 +102,9 @@ export function createChat(
         return
       }
       thinking()
-      let reply = await askFn(text)
+      // Sums are worked out exactly here; the AI just has to say it in character.
+      const sum = quickMath(text)
+      let reply = await askFn(sum ? `${text} (${sum.expression} = ${sum.answer}. Say the answer first.)` : text)
       if (mine !== generation) return // interrupted while thinking
       let { text: said, actions: tagged } = extractActions(reply.text)
       let actions = tagged.filter((a) => wasRequested(a, text))
@@ -113,6 +116,8 @@ export function createChat(
         ;({ text: said } = extractActions(reply.text))
         actions = []
       }
+      // Small models sometimes cheer instead of answering: make sure the answer is said.
+      if (sum && !reply.error && !said.includes(sum.answer)) said = `${sum.answer}! ${said}`.trim()
       onEmotion(reply.emotion)
       if (!reply.error && actions.length) {
         // What the character said goes with the question, so it isn't lost.
