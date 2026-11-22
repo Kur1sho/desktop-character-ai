@@ -45,11 +45,46 @@ function findFile(dir: string, name: string): string | null {
   return null
 }
 
-/** Which llama.cpp release download suits this PC. */
-function assetPattern(): RegExp {
-  if (process.platform === 'win32') return process.arch === 'arm64' ? /bin-win-cpu-arm64\.zip$/ : /bin-win-vulkan-x64\.zip$/
-  if (process.platform === 'darwin') return process.arch === 'arm64' ? /bin-macos-arm64\.(?:zip|tar\.gz)$/ : /bin-macos-x64\.(?:zip|tar\.gz)$/
-  return /bin-ubuntu-(?:vulkan-)?x64\.(?:zip|tar\.gz)$/
+interface ReleaseAsset {
+  name: string
+  browser_download_url: string
+  size: number
+}
+interface Release {
+  tag_name: string
+  assets: ReleaseAsset[]
+}
+
+/**
+ * Scores a llama.cpp release download for this PC (higher is better, 0 means
+ * unusable). Names change between releases, so this matches loosely: the right
+ * OS and CPU, an archive we can open, and Vulkan (works on any graphics card)
+ * before the plain CPU build. CUDA/HIP/SYCL builds need extra installs, so they're skipped.
+ */
+export function scoreAsset(name: string, platform = process.platform, arch = process.arch): number {
+  const n = name.toLowerCase()
+  if (!/\.(?:zip|tar\.gz)$/.test(n) || !n.includes('bin')) return 0
+  if (/cudart|cuda|hip|rocm|sycl|opencl|kompute|musa|cann|xcframework|openvino/.test(n)) return 0
+  const os =
+    platform === 'win32' ? /win/.test(n) : platform === 'darwin' ? /macos|darwin|osx/.test(n) : /ubuntu|linux/.test(n)
+  if (!os) return 0
+  const wantArm = arch === 'arm64'
+  const isArm = /arm64|aarch64/.test(n)
+  if (wantArm !== isArm) return 0
+  if (platform === 'win32' && !wantArm && !/x64|amd64|x86_64/.test(n)) return 0
+  if (/vulkan/.test(n)) return 3
+  if (/cpu/.test(n)) return 2
+  return 1
+}
+
+function bestAsset(release: Release): ReleaseAsset | null {
+  let best: ReleaseAsset | null = null
+  let bestScore = 0
+  for (const a of release.assets) {
+    const sc = scoreAsset(a.name)
+    if (sc > bestScore) [best, bestScore] = [a, sc]
+  }
+  return best
 }
 
 function unpack(archive: string, dir: string): Promise<void> {
@@ -71,13 +106,27 @@ async function ensureServerProgram(status: VisionStatus): Promise<string> {
   if (existing) return existing
 
   status('Getting my eyes ready (one time only)…')
-  const res = await fetch('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest', {
+  // The newest few releases: the very latest can still be uploading its files.
+  const res = await fetch('https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=5', {
     headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'desktop-companion' }
   })
   if (!res.ok) throw new Error(`Couldn't find the vision engine download (HTTP ${res.status}).`)
-  const release = (await res.json()) as { tag_name: string; assets: { name: string; browser_download_url: string; size: number }[] }
-  const asset = release.assets.find((a) => assetPattern().test(a.name))
-  if (!asset) throw new Error('No vision engine download for this PC.')
+  const releases = (await res.json()) as Release[]
+  let release: Release | null = null
+  let asset: ReleaseAsset | null = null
+  for (const r of releases) {
+    asset = bestAsset(r)
+    if (asset) {
+      release = r
+      break
+    }
+  }
+  if (!release || !asset) {
+    const names = releases[0]?.assets.map((a) => a.name).join(', ') ?? 'none'
+    logConversation(`Vision: no download matched this PC (${process.platform} ${process.arch}). Files offered: ${names}`)
+    throw new Error('No vision engine download for this PC.')
+  }
+  logConversation(`Vision: downloading ${asset.name}`)
 
   mkdirSync(dir, { recursive: true })
   const archive = join(dir, asset.name)
