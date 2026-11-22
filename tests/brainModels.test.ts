@@ -4,6 +4,9 @@ import {
   BRAIN_MEDIUM,
   BRAIN_SMALL,
   brainCandidates,
+  choiceKey,
+  type BrainChoice,
+  isGpuError,
   isNetworkError,
   isThinkingModel,
   maxTokensFor,
@@ -11,18 +14,29 @@ import {
 } from '../src/shared/brainModels'
 import { withCopiedText } from '../src/shared/clipboard'
 
+const gpu = (model: string) => ({ model, device: 'gpu' })
+const cpu = (model: string) => ({ model, device: 'cpu' })
+
 describe('brainCandidates', () => {
-  it('uses the 4B brain on a graphics card, stepping down if it will not fit', () => {
-    expect(brainCandidates('auto', true)).toEqual([BRAIN_LARGE, BRAIN_MEDIUM])
+  it('tries the 4B brain on a graphics card, then steps down to the processor', () => {
+    expect(brainCandidates('auto', true)).toEqual([gpu(BRAIN_LARGE), gpu(BRAIN_MEDIUM), cpu(BRAIN_MEDIUM), cpu(BRAIN_SMALL)])
   })
-  it('uses the 1.7B brain on the processor', () => {
-    expect(brainCandidates('', false)).toEqual([BRAIN_MEDIUM, BRAIN_SMALL])
+  it('uses the 1.7B brain on the processor when there is no graphics card', () => {
+    expect(brainCandidates('', false)).toEqual([cpu(BRAIN_MEDIUM), cpu(BRAIN_SMALL)])
+  })
+  it('skips brains that already failed on this PC (integrated graphics)', () => {
+    const failed = [choiceKey(gpu(BRAIN_LARGE) as BrainChoice), choiceKey(gpu(BRAIN_MEDIUM) as BrainChoice)]
+    expect(brainCandidates('auto', true, failed)[0]).toEqual(cpu(BRAIN_MEDIUM))
+  })
+  it('still tries the safest brain if everything failed before', () => {
+    const all = brainCandidates('auto', true).map(choiceKey)
+    expect(brainCandidates('auto', true, all)).toEqual([cpu(BRAIN_SMALL)])
   })
   it('treats the old saved default as auto', () => {
-    expect(brainCandidates(BRAIN_SMALL, true)[0]).toBe(BRAIN_LARGE)
+    expect(brainCandidates(BRAIN_SMALL, true)[0]).toEqual(gpu(BRAIN_LARGE))
   })
-  it('keeps a model the user typed', () => {
-    expect(brainCandidates('someone/My-Model-ONNX', true)).toEqual(['someone/My-Model-ONNX'])
+  it('keeps a model the user typed, falling back to the processor', () => {
+    expect(brainCandidates('someone/My-Model-ONNX', true)).toEqual([gpu('someone/My-Model-ONNX'), cpu('someone/My-Model-ONNX')])
   })
 })
 
@@ -48,4 +62,13 @@ describe('maxTokensFor', () => {
 it('spots network errors', () => {
   expect(isNetworkError('Failed to fetch')).toBe(true)
   expect(isNetworkError('WebGPU out of memory')).toBe(false)
+})
+
+it('spots the graphics chip crashing mid-reply', () => {
+  expect(
+    isGpuError(
+      "failed to call OrtRun(). ERROR_CODE: 1 ... Failed to execute 'mapAsync' on 'GPUBuffer': A valid external Instance reference no longer exists."
+    )
+  ).toBe(true)
+  expect(isGpuError('Unexpected token in JSON')).toBe(false)
 })
