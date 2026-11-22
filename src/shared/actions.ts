@@ -184,6 +184,7 @@ function tidy(text: string): string {
   return text
     .toLowerCase()
     .replace(/[“”"]/g, '')
+    .replace(/^[,.\s]+/, '')
     .replace(/[.!?]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -195,7 +196,23 @@ function tidy(text: string): string {
 /** Matches a plain request like "open Spotify" or "set a timer for 5 minutes". Returns null to let the AI answer. */
 export function parseIntent(input: string): Action | null {
   const t = tidy(input)
-  if (!t || t.split(' ').length > 14) return null
+  if (!t || t.split(' ').length > 16) return null
+  const direct = matchIntent(t)
+  if (direct) return direct
+  // "Hey Robert Tico, search for pancakes": the name was misheard, so try
+  // again without the greeting and up to two words after it.
+  const m = t.match(/^(?:hey|hi|hello|ok|okay|yo|oi|um|uh|so)\b,?\s*(.*)$/)
+  if (!m) return null
+  const words = m[1].split(' ')
+  for (let drop = 0; drop <= 2 && drop < words.length; drop++) {
+    const rest = tidy(words.slice(drop).join(' '))
+    const found = rest && matchIntent(rest)
+    if (found) return found
+  }
+  return null
+}
+
+function matchIntent(t: string): Action | null {
 
   let m: RegExpMatchArray | null
   // Timers and reminders

@@ -7,6 +7,7 @@ import { app, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { isSpotifyConnected, spotifyPlay } from '../spotify'
 import { bestAppMatch, describeAction, validateAction, type Action, type ActionResult } from '../../shared/actions'
 
 const isWindows = process.platform === 'win32'
@@ -82,6 +83,29 @@ async function pressKey(key: keyof typeof KEYS, times = 1): Promise<void> {
   await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$s = New-Object -ComObject WScript.Shell; ${presses}`])
 }
 
+// --- Spotify -----------------------------------------------------------------
+
+async function showInSpotify(query: string): Promise<void> {
+  await shell.openExternal(`spotify:search:${encodeURIComponent(query)}`).catch(() =>
+    shell.openExternal(`https://open.spotify.com/search/${encodeURIComponent(query)}`)
+  )
+}
+
+/** Plays it when Spotify is connected; otherwise (or if that fails) shows the search in Spotify. */
+async function playOnSpotify(query: string): Promise<ActionResult> {
+  if (isSpotifyConnected()) {
+    try {
+      return { ok: true, message: await spotifyPlay(query) }
+    } catch (err) {
+      await showInSpotify(query)
+      const why = err instanceof Error ? err.message : String(err)
+      return { ok: true, message: `${why} I've opened the search in Spotify instead.` }
+    }
+  }
+  await showInSpotify(query)
+  return { ok: true, message: `Found "${query}" in Spotify. Connect Spotify in Settings and I can press play too.` }
+}
+
 // --- Activity log -----------------------------------------------------------------
 
 function log(action: Action, result: ActionResult, source: string): void {
@@ -119,10 +143,7 @@ export async function runAction(raw: unknown, source: 'user' | 'ai'): Promise<Ac
         result = { ok: true, message: `Searched for "${action.query}".` }
         break
       case 'spotify':
-        await shell.openExternal(`spotify:search:${encodeURIComponent(action.query)}`).catch(() =>
-          shell.openExternal(`https://open.spotify.com/search/${encodeURIComponent(action.query)}`)
-        )
-        result = { ok: true, message: `Found "${action.query}" in Spotify.` }
+        result = await playOnSpotify(action.query)
         break
       case 'media':
         await pressKey(action.key)

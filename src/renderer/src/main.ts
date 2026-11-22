@@ -138,13 +138,17 @@ async function refreshSettings(): Promise<void> {
   if (settings.wakeWord) jobs.push(track((p) => preloadStt('tiny', 'wake', p)))
   if (settings.provider === 'builtin') jobs.push(track((p) => warmUp(modelFor(settings), p)))
   if (!settings.setupDone) void runSetup(jobs)
+  else if (!settings.autoApproveAsked) void askAutoApprove()
   else for (const j of jobs) j.catch((err: Error) => console.error('Preload failed:', err.message))
 
   if (settings.wakeWord) {
     void startWake({
       name: () => getPersona(settings.personaId).name,
-      isBusy: () => listening !== null || speaking || thinking,
+      // Only ignored while already listening: "Hey <name>" interrupts talking, thinking and questions.
+      isBusy: () => listening !== null || setupRunning,
+      requireGreeting: () => speaking,
       onWake: (rest, audio) => {
+        interrupt()
         if (!audio && rest.split(' ').length >= 2) {
           // "Hey Robotico, how are you?" - the question came with the name.
           summon()
@@ -193,6 +197,35 @@ async function runSetup(jobs: Promise<void>[]): Promise<void> {
   )
 }
 
+/** Asked once: may the character do simple things without asking every time? */
+let askingApproval = false
+async function askAutoApprove(): Promise<void> {
+  if (askingApproval || setupRunning || !api) return
+  askingApproval = true
+  // Let "All set!" show first.
+  await new Promise((r) => setTimeout(r, settings.setupDone ? 1500 : 4000))
+  summon()
+  const { choice } = chat.confirm(
+    'Can I do simple things without asking you every time? Like opening apps, timers, searches and music. Websites will still ask. (You can change this in Settings.)',
+    false
+  )
+  const c = await choice
+  askingApproval = false
+  if (c === 'dismissed') return // ask again next time
+  const yes = c === 'allow'
+  settings = await api.getSettings()
+  await api.saveSettings({ ...settings, autoApprove: yes, autoApproveAsked: true })
+  chat.say(yes ? "Got it. I'll just do it." : "Okay, I'll always ask first.")
+}
+
+/** Stops talking and drops anything in progress, so a new request starts cleanly. */
+function interrupt(): void {
+  stopSpeaking()
+  speaking = false
+  chat.cancel()
+  thinking = false
+}
+
 // --- Voice: press the hotkey, talk, and it stops when you go quiet ---------
 let listening: Listening | null = null
 
@@ -201,7 +234,7 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
     listening.cancel() // pressing again cancels
     return
   }
-  stopSpeaking()
+  interrupt()
   summon()
   character?.setEmotion('neutral')
   chat.status('Listening…')

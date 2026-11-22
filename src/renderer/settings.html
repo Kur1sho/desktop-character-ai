@@ -79,9 +79,24 @@
 
     <fieldset>
       <legend>Actions</legend>
-      <p class="hint">Your character asks before doing anything on your PC. Tick the ones it can do without asking. Opening websites always asks.</p>
-      <div id="alwaysAllow"></div>
+      <label><input id="autoApprove" type="checkbox" style="width: auto; margin-right: 6px" />Do simple actions without asking me</label>
+      <p class="hint">Opening apps, timers, searches, music and volume. Opening websites always asks, because a link is the easiest thing for a web page to sneak in.</p>
+      <div id="alwaysAllowBox">
+        <p class="hint">Or pick which ones can run without asking:</p>
+        <div id="alwaysAllow"></div>
+      </div>
       <button id="openLog" style="margin-top: 10px">See everything it has done</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Spotify</legend>
+      <p class="hint" id="spotifyState">Not connected: "play lofi" opens the search in Spotify. Connect it so your character can press play (needs Spotify Premium).</p>
+      <div id="spotifySetup">
+        <label for="spotifyClientId">Spotify Client ID</label>
+        <input id="spotifyClientId" type="text" spellcheck="false" placeholder="From your Spotify developer app" />
+        <p class="hint">For now (until the app has its own): go to developer.spotify.com/dashboard, create an app, set the Redirect URI to <b>http://127.0.0.1:43821/callback</b>, tick <b>Web API</b>, then copy the Client ID here.</p>
+      </div>
+      <button id="spotifyConnect">Connect Spotify</button>
     </fieldset>
 
     <div class="actions">

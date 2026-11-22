@@ -97,10 +97,32 @@ export function systemPrompt(persona: Persona): string {
 }
 
 /** Splits "[happy] Hello!" into its emotion and text. Unknown or missing tags become neutral. */
+/** Close matches small models use instead of the listed emotions. */
+const EMOTION_ALIASES: Record<string, Emotion> = {
+  distressed: 'sad', upset: 'sad', worried: 'sad', disappointed: 'sad',
+  excited: 'happy', cheerful: 'happy', joyful: 'happy', proud: 'smug', confident: 'smug',
+  annoyed: 'angry', frustrated: 'angry', irritated: 'angry', grumpy: 'angry',
+  embarrassed: 'flustered', shy: 'flustered', nervous: 'flustered',
+  shocked: 'surprised', confused: 'surprised', curious: 'surprised',
+  tired: 'sleepy', bored: 'sleepy', calm: 'neutral'
+}
+
+/**
+ * Reads the emotion tag and removes it. Small models sometimes put the tag at
+ * the end or invent their own ("[Distressed]"), so any [word] tag is taken out
+ * of what's shown and spoken, and the first one sets the face.
+ */
 export function parseEmotion(reply: string): { emotion: Emotion; text: string } {
-  const m = reply.trim().match(/^\[([a-zA-Z]+)\]\s*/)
-  if (!m) return { emotion: 'neutral', text: reply.trim() }
-  const tag = m[1].toLowerCase() as Emotion
-  const emotion = EMOTIONS.includes(tag) ? tag : 'neutral'
-  return { emotion, text: reply.trim().slice(m[0].length).trim() }
+  let emotion: Emotion | null = null
+  const text = reply
+    .replace(/\[\s*([a-zA-Z]+)\s*\]/g, (_all, word: string) => {
+      const w = word.toLowerCase()
+      const e = (EMOTIONS as readonly string[]).includes(w) ? (w as Emotion) : EMOTION_ALIASES[w]
+      if (!emotion && e) emotion = e
+      return ' '
+    })
+    .replace(/\s+([.,!?])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { emotion: emotion ?? 'neutral', text }
 }

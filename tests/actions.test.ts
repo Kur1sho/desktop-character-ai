@@ -116,3 +116,11 @@ describe('bestAppMatch', () => {
     expect(bestAppMatch('photoshop', apps)).toBeNull()
   })
 })
+
+describe('parseIntent with a misheard name', () => {
+  it('skips the greeting', () => {
+    expect(parseIntent('Hey Robert Tico, search for pancakes.')).toEqual({ type: 'web_search', query: 'pancakes' })
+    expect(parseIntent('hey robotico skip this song')).toEqual({ type: 'media', key: 'next' })
+    expect(parseIntent('hey robotico how are you')).toBeNull()
+  })
+})

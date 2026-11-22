@@ -8,14 +8,19 @@
 import { rms } from './vad'
 import { Segmenter } from './segmenter'
 import { transcribe } from './stt'
-import { matchWakeWord } from './wakeMatch'
+import { matchWakeWord, normalise } from './wakeMatch'
 import { acquireMic, releaseMic } from './mic'
 import { createSpeechDetector, SPEECH_FRAME } from './speechDetector'
 
 export interface WakeOptions {
   name: () => string
-  /** True while the app is busy (listening for a command, thinking, talking). */
+  /** True while the wake word should be ignored completely (already listening). */
   isBusy: () => boolean
+  /**
+   * True while the character is talking. The name can still interrupt, but
+   * only as a greeting ("Hey Robotico"), so it doesn't trigger on its own voice.
+   */
+  requireGreeting?: () => boolean
   /**
    * Called when the name is heard. `rest` is what followed it in the same
    * phrase. `audio` is everything heard so far when the user may still be
@@ -34,6 +39,8 @@ const FIRST_CHECK_MS = 700
 const CHECK_EVERY_MS = 350
 /** The name is in the first couple of seconds, so stop early checks after this. */
 const LAST_CHECK_MS = 3000
+
+const GREETINGS = new Set(['hey', 'hi', 'hello', 'ok', 'okay', 'yo', 'oi'])
 
 let stopFn: (() => void) | null = null
 
@@ -99,6 +106,7 @@ export async function startWake(opts: WakeOptions): Promise<void> {
         if (stopped || fired || opts.isBusy()) return
         const m = matchWakeWord(text, opts.name())
         if (!m.matched) return
+        if (opts.requireGreeting?.() && !GREETINGS.has(normalise(text)[0] ?? '')) return
         fired = true
         // Hand over everything heard up to now, not just what was checked.
         opts.onWake(m.rest, final ? null : (seg.snapshot() ?? null))
