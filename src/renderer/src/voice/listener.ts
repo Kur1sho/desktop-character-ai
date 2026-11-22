@@ -15,7 +15,7 @@ export interface Listening {
 const SAMPLE_RATE = 16000
 const FRAME = 1024 // samples per frame, about 64 ms
 
-export function listen(onLevel?: (level: number, state: VadResult) => void): Listening {
+export function listen(onLevel?: (level: number, state: VadResult, threshold: number) => void): Listening {
   let cancel = () => {}
   const result = new Promise<ListenResult>((resolve, reject) => {
     let finished = false
@@ -60,7 +60,7 @@ export function listen(onLevel?: (level: number, state: VadResult) => void): Lis
           chunks.push(data)
           const level = rms(data)
           const state = vad.push(level, frameMs)
-          onLevel?.(level, state)
+          onLevel?.(level, state, vad.threshold)
           if (state === 'done' || state === 'no-speech') finish(state)
         }
         source.connect(proc)
