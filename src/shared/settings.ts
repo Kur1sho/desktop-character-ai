@@ -18,7 +18,7 @@ export const PROVIDERS: ProviderInfo[] = [
     needsKey: false,
     defaultModel: 'auto',
     modelHint:
-      'Runs on your PC and works offline. "auto" picks the smartest brain your PC can run: Qwen3 4B with a graphics card (about 2.5 GB, downloaded once), otherwise Qwen3 0.6B on the processor.'
+      'Runs on your PC and works offline. "auto" picks the biggest brain your PC can run: Qwen3 14B or 8B on a strong graphics card, otherwise Qwen3 4B (downloaded once). To choose one yourself, type an hf: link or a .gguf file.'
   },
   {
     id: 'ollama',

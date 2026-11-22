@@ -11,6 +11,8 @@ import { anthropicChat } from './anthropic'
 import { ollamaChat } from './ollama'
 import { openaiCompatibleChat } from './openaiCompatible'
 import type { ChatTurn } from './types'
+import { maxTokensFor, stripThinking } from '../../shared/brainModels'
+import { nativeChat } from '../brain/nativeBrain'
 import type { ChatReply } from '../../shared/ipc'
 
 const MAX_TURNS = 30
@@ -66,7 +68,8 @@ export async function chat(userText: string, oneOff = false): Promise<ChatReply>
   try {
     let raw: string
     if (settings.provider === 'builtin') {
-      throw new Error('The built-in brain runs in the companion window.')
+      // llama.cpp in its own process. (If it can't run here, the window uses its own brain instead.)
+      raw = stripThinking(await nativeChat(req.system, history, maxTokensFor(userText)))
     } else if (settings.provider === 'ollama') {
       raw = await ollamaChat(req, settings.ollamaUrl)
     } else {

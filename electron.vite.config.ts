@@ -3,7 +3,16 @@ import { defineConfig } from 'electron-vite'
 
 export default defineConfig({
   main: {
-    resolve: { alias: { '@shared': resolve('src/shared') } }
+    resolve: { alias: { '@shared': resolve('src/shared') } },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          // The built-in brain (llama.cpp) runs in its own process.
+          llamaHost: resolve('src/main/brain/llamaHost.ts')
+        }
+      }
+    }
   },
   preload: {},
   renderer: {

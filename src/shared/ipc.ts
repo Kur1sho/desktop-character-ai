@@ -26,7 +26,9 @@ export const IPC = {
   readClipboard: 'actions:read-clipboard',
   logConversation: 'log:conversation',
   openConversationLog: 'log:open-conversation',
-  openActivityLog: 'actions:open-log'
+  openActivityLog: 'actions:open-log',
+  brainWarmUp: 'brain:warm-up',
+  brainProgress: 'brain:progress'
 } as const
 
 export interface AskOptions {
@@ -81,4 +83,11 @@ export interface CompanionApi {
   openConversationLog(): void
   /** Opens the log of everything the character has done. */
   openActivityLog(): void
+  /**
+   * Downloads (first time only) and loads the built-in brain with llama.cpp.
+   * 'web' means llama.cpp can't run on this PC, so the window's own brain is used.
+   */
+  brainWarmUp(): Promise<{ mode: 'native' | 'web'; error?: string }>
+  /** Download progress for brainWarmUp, 0 to 100. */
+  onBrainProgress(cb: (percent: number) => void): void
 }

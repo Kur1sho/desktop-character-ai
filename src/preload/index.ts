@@ -23,7 +23,9 @@ const api: CompanionApi = {
   readClipboard: () => ipcRenderer.invoke(IPC.readClipboard),
   logConversation: (line) => ipcRenderer.send(IPC.logConversation, line),
   openConversationLog: () => ipcRenderer.send(IPC.openConversationLog),
-  openActivityLog: () => ipcRenderer.send(IPC.openActivityLog)
+  openActivityLog: () => ipcRenderer.send(IPC.openActivityLog),
+  brainWarmUp: () => ipcRenderer.invoke(IPC.brainWarmUp),
+  onBrainProgress: (cb) => ipcRenderer.on(IPC.brainProgress, (_e, pct) => cb(pct))
 }
 
 contextBridge.exposeInMainWorld('companion', api)
