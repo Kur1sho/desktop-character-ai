@@ -163,6 +163,17 @@ export function createRobotico(): Character {
     wave() {
       waveUntil = clock + 1.6
     },
+    dance(move) {
+      if (!move) return
+      // Arms pump up on the beat, alternating sides; the head bobs.
+      const hit = Math.pow(1 - move.phase, 2)
+      const up = (0.2 + 0.22 * move.intensity) * hit
+      const left = move.count % 2 === 0
+      hands[0].position.set(-0.36, 0.36 + (left ? up : up * 0.25), 0.06)
+      hands[1].position.set(0.36, 0.36 + (left ? up * 0.25 : up), 0.06)
+      head.rotation.x += 0.12 * hit
+      head.rotation.z = Math.sin((move.count + move.phase) * Math.PI) * 0.12
+    },
     dispose() {
       root.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose()

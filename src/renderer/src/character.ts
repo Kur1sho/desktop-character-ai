@@ -1,6 +1,15 @@
 import type { Object3D, Vector3 } from 'three'
 import type { Emotion } from '@shared/personas'
 
+export interface DanceMove {
+  /** 0 on the beat, rising to 1 just before the next. */
+  phase: number
+  /** Beat number, for alternating moves. */
+  count: number
+  /** 0 to 1, how loud the music is. */
+  intensity: number
+}
+
 /** Anything the app can put on the desktop: the built-in robot or a VRM model. */
 export interface Character {
   /** Root object. Its origin is at the character's feet. */
@@ -19,5 +28,10 @@ export interface Character {
   setMouth(open: number): void
   /** Play a short wave, used when summoned. */
   wave(): void
+  /**
+   * Dance moves for this frame (arms, head), called after update(). Null when
+   * not dancing. The whole-body bounce and sway is done by the app.
+   */
+  dance(move: DanceMove | null): void
   dispose(): void
 }

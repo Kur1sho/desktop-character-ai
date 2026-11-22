@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 import type { Emotion } from '@shared/personas'
-import type { Character } from './character'
+import type { Character, DanceMove } from './character'
 import { breath } from './idle'
 
 export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
@@ -39,6 +39,20 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
   const spine = bone('spine')
   const chest = bone('chest')
   const neck = bone('neck')
+
+  let danceMove: DanceMove | null = null
+  /** Arms swing up on the beat, alternating; hips twist; head nods. */
+  function applyDance(move: DanceMove): void {
+    const hit = Math.pow(1 - move.phase, 2)
+    const left = move.count % 2 === 0
+    const lift = (0.5 + 0.5 * move.intensity) * hit
+    if (leftUpperArm) leftUpperArm.rotation.z = -1.2 + (left ? 0.9 : 0.3) * lift
+    if (rightUpperArm) rightUpperArm.rotation.z = 1.2 - (left ? 0.3 : 0.9) * lift
+    if (leftLowerArm) leftLowerArm.rotation.z = -0.15 - 0.6 * lift
+    if (rightLowerArm) rightLowerArm.rotation.z = 0.15 + 0.6 * lift
+    if (spine) spine.rotation.y = Math.sin((move.count + move.phase) * Math.PI) * 0.15
+    if (neck) neck.rotation.x = 0.15 * hit
+  }
 
   // VRM preset expressions for each emotion, with weights.
   const EXPRESSIONS: Record<Emotion, Record<string, number>> = {
@@ -96,10 +110,16 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
         weights[name] = (weights[name] ?? 0) + ((target[name] ?? 0) - (weights[name] ?? 0)) * k
         vrm.expressionManager?.setValue(name, weights[name])
       }
+      if (danceMove) applyDance(danceMove)
+      else if (spine) spine.rotation.y = 0
       vrm.update(dt)
     },
     wave() {
       waveUntil = clock + 1.6
+    },
+    dance(move) {
+      // Applied in update(), before the model's bones are refreshed.
+      danceMove = move
     },
     dispose() {
       VRMUtils.deepDispose(vrm.scene)

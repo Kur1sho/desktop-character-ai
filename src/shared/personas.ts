@@ -27,7 +27,16 @@ export interface Persona {
   /** How the built-in Windows voice is tuned for this character. */
   voice: VoiceProfile
   /** Fixed lines for actions, so they're instant and always clear. {action} and {result} are filled in. */
-  lines: { confirm: string; done: string; cancelled: string; failed: string; timerDone: string }
+  lines: {
+    confirm: string
+    done: string
+    cancelled: string
+    failed: string
+    timerDone: string
+    danceStart: string
+    danceStop: string
+    noMusic: string
+  }
 }
 
 export interface VoiceProfile {
@@ -65,7 +74,10 @@ Example lines: "Request received. Executing with maximum enthusiasm." / "Joke de
       done: 'Task complete. {result}',
       cancelled: 'Request cancelled. Standing by.',
       failed: 'Error detected. {result}',
-      timerDone: 'Beep beep. Your timer is done.'
+      timerDone: 'Beep beep. Your timer is done.',
+      danceStart: 'Dance protocol: engaged.',
+      danceStop: 'Dance protocol: complete. That was optimal.',
+      noMusic: 'No music detected. Please play a song and ask again.'
     }
   },
   {
@@ -83,7 +95,10 @@ Example lines: "Hmph. Fine. I'll help. But only because you'd embarrass yourself
       done: "There. {result} You're welcome, I guess.",
       cancelled: "Hmph. Fine, I won't then.",
       failed: "Ugh, it didn't work. {result}",
-      timerDone: "Hey! Your timer's done. Don't say I never remind you of anything."
+      timerDone: "Hey! Your timer's done. Don't say I never remind you of anything.",
+      danceStart: "Ugh, fine. Only because this song is actually okay.",
+      danceStop: "Hmph. I wasn't even trying that hard.",
+      noMusic: "Dance to what? There's no music, idiot. Put something on first."
     }
   }
 ]

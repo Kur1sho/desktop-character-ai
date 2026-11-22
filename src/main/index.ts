@@ -1,4 +1,18 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  screen,
+  session,
+  shell,
+  Tray,
+  webContents
+} from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { computeLayout } from '../shared/layout'
@@ -225,6 +239,20 @@ app.whenReady().then(() => {
     callback(permission === 'media' && wc === win?.webContents)
   })
   session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && wc === win?.webContents)
+  // Dancing: give the companion window the PC's sound (Windows loopback), with
+  // no picker. Only that window may ask; the screen video it comes with is
+  // dropped by the window straight away.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      const from = request.frame ? webContents.fromFrame(request.frame) : null
+      if (!win || from !== win.webContents || process.platform !== 'win32') return callback({})
+      desktopCapturer
+        .getSources({ types: ['screen'] })
+        .then((sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
+        .catch(() => callback({}))
+    },
+    { useSystemPicker: false }
+  )
   for (const evt of ['display-metrics-changed', 'display-added', 'display-removed'] as const) {
     screen.on(evt as 'display-added', () => {
       if (!win) return

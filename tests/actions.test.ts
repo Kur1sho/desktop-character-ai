@@ -133,3 +133,14 @@ describe('Spotify playlists', () => {
     expect(extractActions('Sure. <<spotify_playlist Road Trip>>').actions).toEqual([{ type: 'spotify', query: 'Road Trip', playlist: true }])
   })
 })
+
+describe('parseDanceCommand', () => {
+  it('starts and stops dancing', async () => {
+    const { parseDanceCommand } = await import('../src/shared/actions')
+    expect(parseDanceCommand('Dance to this song!')).toBe('start')
+    expect(parseDanceCommand('Hey Robert Tico, dance')).toBe('start')
+    expect(parseDanceCommand('stop dancing')).toBe('stop')
+    expect(parseDanceCommand('can you dance?')).toBe('start')
+    expect(parseDanceCommand('what is a dance')).toBeNull()
+  })
+})
