@@ -23,9 +23,7 @@ export const IPC = {
   clearMemory: 'settings:clear-memory',
   openSettings: 'settings:open',
   runAction: 'actions:run',
-  openActivityLog: 'actions:open-log',
-  spotifyConnect: 'spotify:connect',
-  spotifyDisconnect: 'spotify:disconnect'
+  openActivityLog: 'actions:open-log'
 } as const
 
 export interface ChatReply {
@@ -69,7 +67,4 @@ export interface CompanionApi {
   runAction(action: Action, source: 'user' | 'ai'): Promise<ActionResult>
   /** Opens the log of everything the character has done. */
   openActivityLog(): void
-  /** Saves the Client ID and opens Spotify's sign-in page. Resolves once connected. */
-  spotifyConnect(clientId: string): Promise<void>
-  spotifyDisconnect(): Promise<void>
 }

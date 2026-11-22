@@ -88,17 +88,6 @@
       <button id="openLog" style="margin-top: 10px">See everything it has done</button>
     </fieldset>
 
-    <fieldset>
-      <legend>Spotify</legend>
-      <p class="hint" id="spotifyState">Not connected: "play lofi" opens the search in Spotify. Connect it so your character can press play (needs Spotify Premium).</p>
-      <details id="spotifySetup" style="margin-top: 6px">
-        <summary class="hint" style="cursor: pointer">Developer: use your own Spotify app</summary>
-        <label for="spotifyClientId">Spotify Client ID</label>
-        <input id="spotifyClientId" type="text" spellcheck="false" placeholder="Leave empty to use the app's own" />
-        <p class="hint">Create an app at developer.spotify.com/dashboard with Redirect URI <b>http://127.0.0.1:43821/callback</b> and Web API ticked.</p>
-      </details>
-      <button id="spotifyConnect">Connect Spotify</button>
-    </fieldset>
 
     <div class="actions">
       <span id="status"></span>

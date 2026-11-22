@@ -9,11 +9,8 @@ const grid = document.getElementById('grid') as HTMLDivElement
 const autoApprove = document.getElementById('autoApprove') as HTMLInputElement
 let current: PublicSettings
 
-const cleanError = (err: unknown) =>
-  (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-
 function isConnected(c: ConnectionInfo): boolean {
-  return c.id === 'spotify' ? current.spotifyConnected : false
+  return Boolean(c.noSignIn)
 }
 
 function tile(c: ConnectionInfo): HTMLElement {
@@ -30,34 +27,22 @@ function tile(c: ConnectionInfo): HTMLElement {
 
   const paint = () => {
     const on = isConnected(c)
-    button.disabled = !c.available
+    button.disabled = !c.available || Boolean(c.noSignIn)
     button.classList.toggle('connected', on)
-    button.textContent = !c.available ? 'Coming soon' : on ? 'Connected ✓' : 'Connect'
+    button.textContent = !c.available ? 'Coming soon' : c.noSignIn ? 'Ready ✓' : on ? 'Connected ✓' : 'Connect'
   }
   paint()
 
-  button.addEventListener('click', async () => {
+  button.addEventListener('click', () => {
+    // Accounts that need signing in get their one-click connect here as they're added.
     err.textContent = ''
-    try {
-      if (isConnected(c)) {
-        await api.spotifyDisconnect()
-      } else {
-        button.textContent = 'Approve it in your browser…'
-        button.disabled = true
-        await api.spotifyConnect('')
-      }
-      current = await api.getSettings()
-    } catch (e) {
-      err.textContent = cleanError(e)
-    }
-    paint()
   })
   return el
 }
 
 document.getElementById('done')!.addEventListener('click', async () => {
   const fresh = await api.getSettings()
-  const { hasKey: _k, spotifyConnected: _s, ...settings } = fresh
+  const { hasKey: _k, ...settings } = fresh
   await api.saveSettings({ ...settings, autoApprove: autoApprove.checked, autoApproveAsked: true })
   window.close()
 })

@@ -80,15 +80,11 @@ export interface Settings {
   autoApprove: boolean
   /** The user has been asked about autoApprove once. */
   autoApproveAsked: boolean
-  /** Client ID of the Spotify app used to control playback. */
-  spotifyClientId: string
 }
 
 /** What the settings screen sees. Keys never leave the main process; only whether one is saved. */
 export interface PublicSettings extends Settings {
   hasKey: Partial<Record<ProviderId, boolean>>
-  /** Signed in to Spotify, so songs can be played, not just searched. */
-  spotifyConnected: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -102,8 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   setupDone: false,
   alwaysAllow: [],
   autoApprove: false,
-  autoApproveAsked: false,
-  spotifyClientId: ''
+  autoApproveAsked: false
 }
 
 export function modelFor(settings: Settings): string {

@@ -7,7 +7,6 @@ import { app, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { isSpotifyConnected, spotifyPlay } from '../spotify'
 import { bestAppMatch, describeAction, validateAction, type Action, type ActionResult } from '../../shared/actions'
 
 const isWindows = process.platform === 'win32'
@@ -91,19 +90,50 @@ async function showInSpotify(query: string): Promise<void> {
   )
 }
 
-/** Plays it when Spotify is connected; otherwise (or if that fails) shows the search in Spotify. */
-async function playOnSpotify(query: string): Promise<ActionResult> {
-  if (isSpotifyConnected()) {
-    try {
-      return { ok: true, message: await spotifyPlay(query) }
-    } catch (err) {
-      await showInSpotify(query)
-      const why = err instanceof Error ? err.message : String(err)
-      return { ok: true, message: `${why} I've opened the search in Spotify instead.` }
+/**
+ * Presses play on the top search result in the Spotify app, using Windows'
+ * accessibility interface (the same one screen readers use). No sign-in, so it
+ * works for every user, free or Premium. The script is fixed text: the search
+ * itself is opened separately, so nothing said ever ends up in a command.
+ */
+const PRESS_TOP_RESULT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$A = [System.Windows.Automation.AutomationElement]
+$scope = [System.Windows.Automation.TreeScope]::Descendants
+$isButton = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+Start-Sleep -Milliseconds 1200
+$deadline = (Get-Date).AddSeconds(10)
+while ((Get-Date) -lt $deadline) {
+  $p = Get-Process Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  if ($p) {
+    $root = $A::FromHandle($p.MainWindowHandle)
+    $top = $root.FindFirst($scope, (New-Object System.Windows.Automation.PropertyCondition($A::NameProperty, 'Top result')))
+    $area = if ($top) { $top } else { $root }
+    foreach ($b in $area.FindAll($scope, $isButton)) {
+      $n = $b.Current.Name
+      if ($n -like 'Play *' -and $b.Current.IsEnabled -and -not $b.Current.IsOffscreen) {
+        $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+        Write-Output $n.Substring(5)
+        exit 0
+      }
     }
   }
+  Start-Sleep -Milliseconds 400
+}
+exit 3
+`
+
+/** Opens the search in Spotify and presses play on the top result. Falls back to just showing the search. */
+async function playOnSpotify(query: string): Promise<ActionResult> {
   await showInSpotify(query)
-  return { ok: true, message: `Found "${query}" in Spotify. Connect Spotify in Settings and I can press play too.` }
+  if (!isWindows) return { ok: true, message: `Opened "${query}" in Spotify.` }
+  try {
+    const played = (await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PRESS_TOP_RESULT], 20000)).trim()
+    return { ok: true, message: played ? `Playing ${played}.` : `Playing "${query}".` }
+  } catch {
+    return { ok: true, message: `I opened "${query}" in Spotify, but couldn't press play. Click the top result.` }
+  }
 }
 
 // --- Activity log -----------------------------------------------------------------
