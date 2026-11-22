@@ -13,6 +13,7 @@ import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
 import { speak, stopSpeaking } from './voice/speaker'
 import { transcribe } from './voice/stt'
+import { startWake, stopWake } from './voice/wake'
 
 declare global {
   interface Window {
@@ -70,16 +71,42 @@ const chat = createChat(
   (emotion) => character?.setEmotion(emotion),
   (text) => {
     if (settings.voiceOutput) {
-      void speak(text, getPersona(settings.personaId).voice, (open) => character?.setMouth(open))
+      speaking = true
+      void speak(text, getPersona(settings.personaId).voice, (open) => character?.setMouth(open)).finally(() => {
+        // A short grace period so the wake word doesn't hear the tail of our own voice.
+        setTimeout(() => (speaking = false), 600)
+      })
     }
   }
 )
+let speaking = false
+let thinking = false
 
 async function refreshSettings(): Promise<void> {
   if (!api) return
   settings = await api.getSettings()
   // Start fetching the built-in brain in the background so the first chat is quick.
   if (settings.provider === 'builtin') warmUp(modelFor(settings))
+  if (settings.wakeWord) {
+    void startWake({
+      name: () => getPersona(settings.personaId).name,
+      sttSize: () => settings.sttSize,
+      isBusy: () => listening !== null || speaking || thinking,
+      onWake: (rest) => {
+        if (rest.split(' ').length >= 2) {
+          // "Hey Robotico, how are you?" - the question came with the name.
+          summon()
+          thinking = true
+          void chat.ask(rest).finally(() => (thinking = false))
+        } else {
+          void startVoice()
+        }
+      },
+      onError: (err) => console.error('Wake word:', err.message)
+    })
+  } else {
+    stopWake()
+  }
 }
 
 // --- Voice: press the hotkey, talk, and it stops when you go quiet ---------
@@ -120,7 +147,8 @@ async function startVoice(): Promise<void> {
       character?.setEmotion('sad')
       return chat.say("Sorry, I didn't catch that.")
     }
-    await chat.ask(text)
+    thinking = true
+    await chat.ask(text).finally(() => (thinking = false))
   } catch (err) {
     listening = null
     character?.setEmotion('sad')

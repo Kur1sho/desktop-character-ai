@@ -67,6 +67,8 @@ export interface Settings {
   ollamaUrl: string
   /** Speak replies out loud. */
   voiceOutput: boolean
+  /** Listen for "Hey <name>" all the time (processed locally). */
+  wakeWord: boolean
   /** Speech recognition model size: bigger is more accurate but slower. */
   sttSize: 'tiny' | 'base' | 'small'
 }
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: Settings = {
   models: {},
   ollamaUrl: 'http://127.0.0.1:11434',
   voiceOutput: true,
+  wakeWord: true,
   sttSize: 'base'
 }
 

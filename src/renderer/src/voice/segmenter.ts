@@ -1,0 +1,82 @@
+// Splits a continuous microphone stream into short spoken phrases, for the
+// always-on wake word. Keeps a little audio from before each phrase so the
+// first syllable isn't cut off.
+
+const RATIO = 3
+const MIN_THRESHOLD = 0.006
+const MAX_THRESHOLD = 0.03
+
+export interface SegmenterOptions {
+  endSilenceMs?: number
+  minSpeechMs?: number
+  maxPhraseMs?: number
+  preRollMs?: number
+}
+
+export class Segmenter {
+  private readonly o: Required<SegmenterOptions>
+  private noise = Infinity
+  private active = false
+  private loudFor = 0
+  private quietFor = 0
+  private phraseMs = 0
+  private preRoll: Float32Array[] = []
+  private preRollMs = 0
+  private phrase: Float32Array[] = []
+
+  constructor(opts: SegmenterOptions = {}) {
+    this.o = { endSilenceMs: 700, minSpeechMs: 250, maxPhraseMs: 6000, preRollMs: 400, ...opts }
+  }
+
+  get threshold(): number {
+    const base = Number.isFinite(this.noise) ? this.noise * RATIO : MIN_THRESHOLD
+    return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, base))
+  }
+
+  /** Feed one frame. Returns a finished phrase, or null. */
+  push(samples: Float32Array, rms: number, frameMs: number): Float32Array | null {
+    this.noise = rms < this.noise ? rms : this.noise * (1 + 0.0002 * frameMs)
+    const loud = rms > this.threshold
+
+    if (!this.active) {
+      this.preRoll.push(samples)
+      this.preRollMs += frameMs
+      while (this.preRollMs > this.o.preRollMs && this.preRoll.length > 1) {
+        this.preRoll.shift()
+        this.preRollMs -= frameMs
+      }
+      this.loudFor = loud ? this.loudFor + frameMs : 0
+      if (this.loudFor >= this.o.minSpeechMs) {
+        this.active = true
+        this.phrase = [...this.preRoll]
+        this.phraseMs = this.preRollMs
+        this.quietFor = 0
+        this.preRoll = []
+        this.preRollMs = 0
+      }
+      return null
+    }
+
+    this.phrase.push(samples)
+    this.phraseMs += frameMs
+    this.quietFor = loud ? 0 : this.quietFor + frameMs
+    if (this.quietFor >= this.o.endSilenceMs || this.phraseMs >= this.o.maxPhraseMs) {
+      const out = concat(this.phrase)
+      this.active = false
+      this.phrase = []
+      this.loudFor = 0
+      return out
+    }
+    return null
+  }
+}
+
+function concat(chunks: Float32Array[]): Float32Array {
+  const out = new Float32Array(chunks.reduce((n, c) => n + c.length, 0))
+  let o = 0
+  for (const c of chunks) {
+    out.set(c, o)
+    o += c.length
+  }
+  return out
+}
