@@ -274,6 +274,29 @@ function titleCase(s: string): string {
   return s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 }
 
+// --- Dancing ---------------------------------------------------------------
+// Not an action on the PC (it only listens to what's already playing), so it
+// doesn't need a Yes/No.
+
+const DANCE_START = /^(?:dance|start dancing|dance (?:to|with) (?:this|that|the|my|some)(?: song| music| track| tune| beat)?|dance for me|let'?s dance|show me (?:your|some)(?: dance)? moves|bust a move|party time|vibe(?: with me)?)$/
+const DANCE_STOP = /^(?:stop dancing|stop (?:the |your )?danc\w*|no more dancing|that'?s enough(?: dancing)?|you can stop(?: dancing)?|chill|calm down)$/
+
+/** "dance", "dance to this song", "stop dancing" (also after a misheard name). */
+export function parseDanceCommand(input: string): 'start' | 'stop' | null {
+  const check = (t: string) => (DANCE_START.test(t) ? 'start' : DANCE_STOP.test(t) ? 'stop' : null)
+  const t = tidy(input)
+  const direct = check(t)
+  if (direct) return direct
+  const m = t.match(/^(?:hey|hi|hello|ok|okay|yo|oi|um|uh|so)\b,?\s*(.*)$/)
+  if (!m) return null
+  const words = m[1].split(' ')
+  for (let drop = 0; drop <= 2 && drop < words.length; drop++) {
+    const found = check(tidy(words.slice(drop).join(' ')))
+    if (found) return found
+  }
+  return null
+}
+
 // --- Actions the AI asks for ---------------------------------------------
 // The AI adds tags like <<open_app Spotify>> to its reply. They are taken out
 // of the text before it's shown, and each one still has to be confirmed.

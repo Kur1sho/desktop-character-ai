@@ -9,6 +9,8 @@ import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
+import { listenToMusic, type MusicListener } from './dance/music'
+import { parseDanceCommand } from '@shared/actions'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
@@ -47,6 +49,9 @@ scene.add(sun)
 
 // The stage holds the character and is positioned at the anchor point.
 const stage = new THREE.Group()
+/** Holds the character; bounces and sways when dancing. */
+const dancer = new THREE.Group()
+stage.add(dancer)
 scene.add(stage)
 
 let character: Character | null = null
@@ -82,7 +87,14 @@ const chat = createChat(
   api ? ask : null,
   (emotion) => character?.setEmotion(emotion),
   (text) => void sayAloud(text),
-  (list, source, intro) => (actions ? actions.run(list, source, intro) : Promise.resolve())
+  (list, source, intro) => (actions ? actions.run(list, source, intro) : Promise.resolve()),
+  (text) => {
+    const cmd = parseDanceCommand(text)
+    if (!cmd) return false
+    if (cmd === 'start') void startDancing()
+    else stopDancing(true)
+    return true
+  }
 )
 let speaking = false
 let thinking = false
@@ -196,6 +208,66 @@ async function runSetup(jobs: Promise<void>[]): Promise<void> {
   )
 }
 
+// --- Dancing to whatever the PC is playing -----------------------------------
+let music: MusicListener | null = null
+let danceStartedAt = 0
+
+async function startDancing(): Promise<void> {
+  if (music) return
+  summon()
+  const lines = getPersona(settings.personaId).lines
+  try {
+    music = await listenToMusic()
+  } catch (err) {
+    console.error('Music listening failed:', err)
+    character?.setEmotion('sad')
+    chat.say("I can't hear your PC's sound right now. (Dancing needs Windows.)")
+    return
+  }
+  danceStartedAt = performance.now()
+  character?.setEmotion('happy')
+  chat.say(lines.danceStart)
+  void sayAloud(lines.danceStart)
+}
+
+function stopDancing(announce: boolean, line?: string): void {
+  if (!music) return
+  music.stop()
+  music = null
+  dancer.position.set(0, 0, 0)
+  dancer.rotation.set(0, 0, 0)
+  character?.dance(null)
+  if (announce) {
+    const text = line ?? getPersona(settings.personaId).lines.danceStop
+    chat.say(text)
+    void sayAloud(text)
+  }
+}
+
+/** One frame of dancing: reads the beat and moves the character. */
+function danceFrame(): void {
+  if (!music || !character) return
+  const now = performance.now()
+  const s = music.read(now)
+  // Stop by itself when the music stops (or never started).
+  if (now - danceStartedAt > 4000 && s.silentForMs > 5000) {
+    const lines = getPersona(settings.personaId).lines
+    stopDancing(true, s.bpm ? lines.danceStop : lines.noMusic)
+    return
+  }
+  if (!s.bpm) {
+    // Still working out the beat: a gentle sway so it's clearly listening.
+    dancer.rotation.z = Math.sin(now / 400) * 0.03
+    character.dance(null)
+    return
+  }
+  const hit = Math.pow(1 - s.phase, 2)
+  const energy = 0.5 + 0.5 * s.intensity
+  dancer.position.y = CHARACTER_PX * 0.035 * hit * energy
+  dancer.rotation.z = Math.sin((s.count + s.phase) * Math.PI) * 0.06 * energy
+  character.dance({ phase: s.phase, count: s.count, intensity: s.intensity })
+}
+
 /** Stops talking and drops anything in progress, so a new request starts cleanly. */
 function interrupt(): void {
   stopSpeaking()
@@ -277,13 +349,13 @@ resize()
 
 function setCharacter(next: Character): void {
   if (character) {
-    stage.remove(character.root)
+    dancer.remove(character.root)
     character.dispose()
   }
   character = next
   const scale = CHARACTER_PX / next.height
   next.root.scale.setScalar(scale)
-  stage.add(next.root)
+  dancer.add(next.root)
   summon()
 }
 
@@ -443,6 +515,7 @@ renderer.setAnimationLoop(() => {
     character.lookAt(mouse)
     character.setBlink(blinkAmount(t))
     character.update(dt, t)
+    danceFrame()
   }
 
   if (clipping) {

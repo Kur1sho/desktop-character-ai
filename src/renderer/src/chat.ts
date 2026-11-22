@@ -36,7 +36,9 @@ export function createChat(
   onEmotion: (e: Emotion) => void,
   onReply: (text: string) => void = () => {},
   /** Runs actions: plain requests ("open Spotify") come from the user, tags in replies from the AI. */
-  onActions: (actions: Action[], source: 'user' | 'ai', intro?: string) => Promise<void> = async () => {}
+  onActions: (actions: Action[], source: 'user' | 'ai', intro?: string) => Promise<void> = async () => {},
+  /** Handles requests that never reach the AI (like "dance"). Returns true if it took care of it. */
+  onLocal: (text: string) => boolean = () => false
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -85,6 +87,7 @@ export function createChat(
     const mine = ++generation
     try {
       // Plain requests are handled straight away, without the AI.
+      if (onLocal(text)) return
       const intent = parseIntent(text)
       if (intent) {
         await onActions([intent], 'user')
