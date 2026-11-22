@@ -38,13 +38,14 @@ export function warmUp(model: string, onProgress?: (percent: number) => void): P
 export function think(
   model: string,
   messages: { role: string; content: string }[],
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  maxTokens?: number
 ): Promise<string> {
   progressCb = onProgress ?? null
   const id = nextId++
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject })
-    getWorker().postMessage({ type: 'generate', id, model, messages })
+    getWorker().postMessage({ type: 'generate', id, model, maxTokens, messages })
   })
 }
 

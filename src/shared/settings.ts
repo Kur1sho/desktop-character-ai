@@ -16,8 +16,9 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'builtin',
     label: 'Built-in (free, private, works offline)',
     needsKey: false,
-    defaultModel: 'onnx-community/gemma-3-1b-it-ONNX',
-    modelHint: 'Runs on your PC. Downloads about 1 GB the first time, then works offline.'
+    defaultModel: 'auto',
+    modelHint:
+      'Runs on your PC and works offline. "auto" picks the smartest brain your PC can run: Qwen3 4B with a graphics card (about 2.5 GB, downloaded once), otherwise Qwen3 1.7B.'
   },
   {
     id: 'ollama',

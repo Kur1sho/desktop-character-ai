@@ -6,6 +6,7 @@ import { getPersona, parseEmotion, type Emotion } from '@shared/personas'
 import { shortenReply } from '@shared/brevity'
 import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
 import { think, warmUp } from './brain/brain'
+import { maxTokensFor } from '@shared/brainModels'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
@@ -78,7 +79,8 @@ async function ask(text: string, opts?: AskOptions): Promise<ChatReply> {
   const { system, history } = await api.chatPrepare(text, opts)
   try {
     const raw = await think(modelFor(settings), [{ role: 'system', content: system }, ...history], (pct) =>
-      chat.status(`Downloading my brain (one time only)… ${pct}%`)
+      chat.status(`Downloading my brain (one time only)… ${pct}%`),
+      maxTokensFor(text)
     )
     const short = shortenReply(raw, text)
     if (!opts?.oneOff) await api.chatRecord(text, short)
