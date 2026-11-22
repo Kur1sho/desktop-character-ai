@@ -16,7 +16,7 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 - Drag the character left and right along the taskbar
 - Double-click the character, or click the tray icon, to summon it again
 - **Talk to it**: click the character (or press Ctrl+Shift+T) and type. It answers in a speech bubble, in character, with matching facial expressions
-- Two personalities: **Robotico** (endlessly cheerful robot) and **Suzu** (tsundere, placeholder name)
+- Two personalities: **Robotico** (loud, cocky little robot) and **Suzu** (tsundere, placeholder name)
 - **Works out of the box**: a built-in AI brain runs on your PC (GPU if available), downloaded once on first launch (about 1 GB), then offline. No accounts, keys or extra installs
 - Optional in Settings (tray menu): **Ollama**, or your own key for **Claude**, **OpenAI**, **OpenRouter** or **Gemini** for a smarter, wittier character
 - **Wake word**: just say **"Hey Robotico"** (or the current character's name). You can say the question in one go ("Hey Robotico, how are you?") or wait for him to pop up. Heard and understood only on your PC; toggle it in Settings
