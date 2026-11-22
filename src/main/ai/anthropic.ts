@@ -9,7 +9,7 @@ export async function anthropicChat(req: ChatRequest, apiKey: string): Promise<s
   const useFallback = FALLBACK_MODELS.test(req.model)
   const response = await client.beta.messages.create({
     model: req.model,
-    max_tokens: 1024,
+    max_tokens: 400,
     // Chat replies are short, so keep thinking light for snappy answers.
     output_config: { effort: 'low' },
     // The persona prompt never changes mid-chat, so cache it.

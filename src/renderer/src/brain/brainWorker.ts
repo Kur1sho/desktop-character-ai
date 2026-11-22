@@ -63,7 +63,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
     }
     const gen = await load(msg.model)
     const out = (await gen(msg.messages as never, {
-      max_new_tokens: 120,
+      max_new_tokens: 80,
       do_sample: true,
       temperature: 0.8,
       top_p: 0.9,

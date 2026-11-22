@@ -7,7 +7,8 @@ const FEMALE_HINTS = ['female', 'zira', 'aria', 'jenny', 'hazel', 'susan', 'ana'
 /** Picks the best available voice for a profile. Exported for tests. */
 export function pickVoice<V extends { name: string; lang: string }>(voices: V[], profile: VoiceProfile): V | null {
   const english = voices.filter((v) => v.lang.toLowerCase().startsWith('en'))
-  const pool = english.length ? english : voices
+  const accent = profile.lang ? english.filter((v) => v.lang.toLowerCase().replace('_', '-') === profile.lang!.toLowerCase()) : []
+  const pool = accent.length ? accent : english.length ? english : voices
   for (const want of profile.prefer) {
     const hit = pool.find((v) => v.name.toLowerCase().includes(want.toLowerCase()))
     if (hit) return hit

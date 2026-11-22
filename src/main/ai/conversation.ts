@@ -4,6 +4,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getPersona, parseEmotion, systemPrompt } from '../../shared/personas'
+import { shortenReply } from '../../shared/brevity'
 import { modelFor, PROVIDERS } from '../../shared/settings'
 import { getApiKey, getSettings } from '../settingsStore'
 import { anthropicChat } from './anthropic'
@@ -76,8 +77,10 @@ export async function chat(userText: string): Promise<ChatReply> {
           ? await anthropicChat(req, key)
           : await openaiCompatibleChat(settings.provider, req, key)
     }
-    const reply = parseEmotion(raw)
-    saveHistory(persona.id, [...history, { role: 'assistant', content: raw.trim() }])
+    // Short replies, saved short too, so the model keeps to the same length.
+    const short = shortenReply(raw, userText)
+    const reply = parseEmotion(short)
+    saveHistory(persona.id, [...history, { role: 'assistant', content: short }])
     return reply
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

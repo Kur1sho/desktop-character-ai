@@ -3,6 +3,7 @@ import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
 import type { ChatReply } from '@shared/ipc'
 import { getPersona, parseEmotion, type Emotion } from '@shared/personas'
+import { shortenReply } from '@shared/brevity'
 import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
 import { think, warmUp } from './brain/brain'
 import type { Character } from './character'
@@ -79,8 +80,9 @@ async function ask(text: string): Promise<ChatReply> {
     const raw = await think(modelFor(settings), [{ role: 'system', content: system }, ...history], (pct) =>
       chat.status(`Downloading my brain (one time only)… ${pct}%`)
     )
-    await api.chatRecord(text, raw)
-    return parseEmotion(raw)
+    const short = shortenReply(raw, text)
+    await api.chatRecord(text, short)
+    return parseEmotion(short)
   } catch (err) {
     return { emotion: 'sad', text: err instanceof Error ? err.message : String(err), error: true }
   }
