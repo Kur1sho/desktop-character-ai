@@ -19,7 +19,8 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 - Two personalities: **Robotico** (deadpan robot) and **Suzu** (tsundere, placeholder name)
 - **Works out of the box**: a built-in AI brain runs on your PC (GPU if available), downloaded once on first launch (about 1 GB), then offline. No accounts, keys or extra installs
 - Optional in Settings (tray menu): **Ollama**, or your own key for **Claude**, **OpenAI**, **OpenRouter** or **Gemini** for a smarter, wittier character
-- **Voice**: press **Ctrl+Shift+Space** and talk. It stops listening when you go quiet, works out what you said on your PC (Whisper, downloaded once), and answers out loud with a voice tuned to each character, with lip sync. Ctrl+Shift+T opens the text box
+- **Wake word**: just say **"Hey Robotico"** (or the current character's name). You can say the question in one go ("Hey Robotico, how are you?") or wait for him to pop up. Heard and understood only on your PC; toggle it in Settings
+- **Voice**: or press **Ctrl+Shift+Space** and talk. It stops listening when you go quiet, works out what you said on your PC (Whisper, downloaded once), and answers out loud with a voice tuned to each character, with lip sync. Ctrl+Shift+T opens the text box
 - Keys are encrypted with Windows' own protection and never shown again; chat history is stored only on your PC, with a button to wipe it
 
 ## Running it on Windows

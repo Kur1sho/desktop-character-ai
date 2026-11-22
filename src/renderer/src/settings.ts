@@ -18,6 +18,8 @@ const keyHint = $<HTMLParagraphElement>('keyHint')
 const status = $<HTMLSpanElement>('status')
 const voiceOutput = $<HTMLInputElement>('voiceOutput')
 const sttSize = $<HTMLSelectElement>('sttSize')
+const wakeWord = $<HTMLInputElement>('wakeWord')
+const wakeName = $<HTMLSpanElement>('wakeName')
 
 let current: PublicSettings
 
@@ -44,6 +46,8 @@ function render(): void {
   key.placeholder = current.hasKey[current.provider] ? 'Saved (hidden). Paste a new one to replace it.' : 'Paste your key'
   keyHint.textContent = info.keyUrl ? `Get a key at ${info.keyUrl}` : ''
   voiceOutput.checked = current.voiceOutput
+  wakeWord.checked = current.wakeWord
+  wakeName.textContent = PERSONAS.find((p) => p.id === current.personaId)?.name ?? 'Robotico'
   sttSize.value = current.sttSize
 }
 
@@ -60,6 +64,9 @@ model.addEventListener('input', () => {
 })
 voiceOutput.addEventListener('change', () => {
   current.voiceOutput = voiceOutput.checked
+})
+wakeWord.addEventListener('change', () => {
+  current.wakeWord = wakeWord.checked
 })
 sttSize.addEventListener('change', () => {
   current.sttSize = sttSize.value as typeof current.sttSize
