@@ -204,8 +204,12 @@ ipcMain.handle(IPC.getInitialModel, () => {
   return path ? { data: toArrayBuffer(readFileSync(path)), name: basename(path) } : null
 })
 
-ipcMain.handle(IPC.chat, (_e, text: string) => chat(String(text).slice(0, 3000)))
-ipcMain.handle(IPC.chatPrepare, (_e, text: string) => prepare(String(text).slice(0, 3000)))
+ipcMain.handle(IPC.chat, (_e, text: string, opts?: { oneOff?: unknown }) =>
+  chat(String(text).slice(0, 3000), opts?.oneOff === true)
+)
+ipcMain.handle(IPC.chatPrepare, (_e, text: string, opts?: { oneOff?: unknown }) =>
+  prepare(String(text).slice(0, 3000), opts?.oneOff === true)
+)
 ipcMain.handle(IPC.chatRecord, (_e, userText: string, reply: string) => record(String(userText), String(reply)))
 ipcMain.handle(IPC.getSettings, () => getPublicSettings())
 ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {

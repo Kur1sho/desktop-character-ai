@@ -39,9 +39,10 @@ export function clearHistory(personaId: string): void {
 }
 
 /** The system prompt and history (with the new message) for the current character. */
-export function prepare(userText: string): { system: string; history: ChatTurn[] } {
+export function prepare(userText: string, oneOff = false): { system: string; history: ChatTurn[] } {
   const persona = getPersona(getSettings().personaId)
-  return { system: systemPrompt(persona), history: [...loadHistory(persona.id), { role: 'user', content: userText }] }
+  const past = oneOff ? [] : loadHistory(persona.id)
+  return { system: systemPrompt(persona), history: [...past, { role: 'user', content: userText }] }
 }
 
 /** Saves an exchange that was answered outside the main process (the built-in brain). */
@@ -54,10 +55,11 @@ export function record(userText: string, reply: string): void {
   ])
 }
 
-export async function chat(userText: string): Promise<ChatReply> {
+/** oneOff: a single job that neither sees nor joins the chat history (small models copy old answers). */
+export async function chat(userText: string, oneOff = false): Promise<ChatReply> {
   const settings = getSettings()
   const persona = getPersona(settings.personaId)
-  const history = [...loadHistory(persona.id), { role: 'user' as const, content: userText }]
+  const history = [...(oneOff ? [] : loadHistory(persona.id)), { role: 'user' as const, content: userText }]
   const req = { system: systemPrompt(persona), history, model: modelFor(settings) }
   const info = PROVIDERS.find((p) => p.id === settings.provider)
 
@@ -80,7 +82,7 @@ export async function chat(userText: string): Promise<ChatReply> {
     // Short replies, saved short too, so the model keeps to the same length.
     const short = shortenReply(raw, userText)
     const reply = parseEmotion(short)
-    saveHistory(persona.id, [...history, { role: 'assistant', content: short }])
+    if (!oneOff) saveHistory(persona.id, [...history, { role: 'assistant', content: short }])
     return reply
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

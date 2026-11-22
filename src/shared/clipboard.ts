@@ -21,5 +21,5 @@ export function clipboardRequest(text: string): 'read' | 'ask' | null {
 /** The message for the AI: the request, then the copied text clearly marked as data. */
 export function withCopiedText(request: string, copied: string): string {
   const clip = copied.length > MAX_COPIED ? `${copied.slice(0, MAX_COPIED)}…` : copied
-  return `${request}\n\n${COPIED_MARKER}\n"""\n${clip}\n"""`
+  return `Do exactly this with the copied text below: ${request}\nReply with the result itself (for a translation, the translated text).\n\n${COPIED_MARKER}\n"""\n${clip}\n"""`
 }

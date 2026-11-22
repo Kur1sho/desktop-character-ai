@@ -1,5 +1,5 @@
 // The speech bubble and text box above the character.
-import type { ChatReply } from '@shared/ipc'
+import type { AskOptions, ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
 import { describeAction, extractActions, parseIntent, wasRequested, type Action } from '@shared/actions'
 import { quickMath } from '@shared/quickMath'
@@ -36,7 +36,7 @@ export function readingMs(text: string): number {
 }
 
 export function createChat(
-  askFn: ((text: string) => Promise<ChatReply>) | null,
+  askFn: ((text: string, opts?: AskOptions) => Promise<ChatReply>) | null,
   onEmotion: (e: Emotion) => void,
   onReply: (text: string) => void = () => {},
   /** Runs actions: plain requests ("open Spotify") come from the user, tags in replies from the AI. */
@@ -132,8 +132,10 @@ export function createChat(
       thinking()
       // Sums are worked out exactly here; the AI just has to say it in character.
       const sum = clip ? null : quickMath(text)
+      // Jobs on copied text are one-offs: the small AI would otherwise copy its last answer.
       let reply = await askFn(
-        copied ? withCopiedText(text, copied) : sum ? `${text} (${sum.expression} = ${sum.answer}. Say the answer first.)` : text
+        copied ? withCopiedText(text, copied) : sum ? `${text} (${sum.expression} = ${sum.answer}. Say the answer first.)` : text,
+        copied ? { oneOff: true } : undefined
       )
       if (sum) log(`  -> worked out ${sum.expression} = ${sum.answer}`)
       log(`  AI replied: ${reply.text}`)
