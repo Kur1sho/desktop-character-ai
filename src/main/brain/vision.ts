@@ -87,15 +87,36 @@ function bestAsset(release: Release): ReleaseAsset | null {
   return best
 }
 
-function unpack(archive: string, dir: string): Promise<void> {
-  // Windows 10+ ships bsdtar, which opens zip files. Elsewhere use unzip/tar.
-  const [cmd, args] =
-    process.platform === 'win32' || archive.endsWith('.tar.gz')
-      ? ['tar', ['-xf', archive, '-C', dir]]
-      : ['unzip', ['-q', '-o', archive, '-d', dir]]
+function runTool(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) =>
-    execFile(cmd, args, { windowsHide: true }, (err) => (err ? reject(err) : resolve()))
+    execFile(cmd, args, { windowsHide: true, timeout: 5 * 60 * 1000 }, (err, _out, errOut) =>
+      err ? reject(new Error(`${err.message} ${String(errOut).trim()}`)) : resolve()
+    )
   )
+}
+
+async function unpack(archive: string, dir: string): Promise<void> {
+  mkdirSync(dir, { recursive: true })
+  if (process.platform === 'win32') {
+    // Windows' own tar (bsdtar) opens zip files. Use it by full path: a "tar"
+    // from Git for Windows may come first on PATH, and it can't read zips or C:\ paths.
+    const winTar = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'tar.exe')
+    try {
+      if (existsSync(winTar)) return await runTool(winTar, ['-xf', archive, '-C', dir])
+    } catch (err) {
+      logConversation(`Vision: Windows tar couldn't unpack (${err instanceof Error ? err.message : err}), trying PowerShell`)
+    }
+    // Fallback: PowerShell's Expand-Archive. Paths go in environment variables, never into the command.
+    return new Promise((resolve, reject) =>
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:ZIP_IN -DestinationPath $env:ZIP_OUT -Force'],
+        { windowsHide: true, timeout: 10 * 60 * 1000, env: { ...process.env, ZIP_IN: archive, ZIP_OUT: dir } },
+        (err, _out, errOut) => (err ? reject(new Error(`${err.message} ${String(errOut).trim()}`)) : resolve())
+      )
+    )
+  }
+  return archive.endsWith('.tar.gz') ? runTool('tar', ['-xzf', archive, '-C', dir]) : runTool('unzip', ['-q', '-o', archive, '-d', dir])
 }
 
 /** Downloads llama-server once (from llama.cpp's official GitHub releases) and returns its path. */
@@ -130,19 +151,22 @@ async function ensureServerProgram(status: VisionStatus): Promise<string> {
 
   mkdirSync(dir, { recursive: true })
   const archive = join(dir, asset.name)
-  const dl = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'desktop-companion' } })
-  if (!dl.ok || !dl.body) throw new Error(`Couldn't download the vision engine (HTTP ${dl.status}).`)
-  let got = 0
-  let lastPct = -1
-  const counter = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, ctl) {
-      got += chunk.byteLength
-      const pct = asset.size ? Math.floor((got / asset.size) * 100) : 0
-      if (pct !== lastPct) status(`Getting my eyes ready (one time only)… ${(lastPct = pct)}%`)
-      ctl.enqueue(chunk)
-    }
-  })
-  await pipeline(Readable.fromWeb(dl.body.pipeThrough(counter) as never), createWriteStream(archive))
+  // A complete download from an earlier try (if unpacking failed) is reused.
+  if (!(existsSync(archive) && statSync(archive).size === asset.size)) {
+    const dl = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'desktop-companion' } })
+    if (!dl.ok || !dl.body) throw new Error(`Couldn't download the vision engine (HTTP ${dl.status}).`)
+    let got = 0
+    let lastPct = -1
+    const counter = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, ctl) {
+        got += chunk.byteLength
+        const pct = asset.size ? Math.floor((got / asset.size) * 100) : 0
+        if (pct !== lastPct) status(`Getting my eyes ready (one time only)… ${(lastPct = pct)}%`)
+        ctl.enqueue(chunk)
+      }
+    })
+    await pipeline(Readable.fromWeb(dl.body.pipeThrough(counter) as never), createWriteStream(archive))
+  }
   await unpack(archive, join(dir, release.tag_name))
   rmSync(archive, { force: true })
   const found = findFile(dir, exe)
