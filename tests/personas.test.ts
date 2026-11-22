@@ -65,3 +65,10 @@ describe('Robotico personality', () => {
     expect(prompt).toContain('do NOT gush')
   })
 })
+
+describe('emotion in the wrong brackets', () => {
+  it('reads <<frustrated>> as an emotion and hides it', () => {
+    expect(parseEmotion('Unacceptable! <<frustrated>>')).toEqual({ emotion: 'angry', text: 'Unacceptable!' })
+    expect(parseEmotion('Sure. <<open_app Spotify>>').text).toBe('Sure. <<open_app Spotify>>')
+  })
+})

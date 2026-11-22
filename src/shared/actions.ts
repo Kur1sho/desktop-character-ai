@@ -371,7 +371,8 @@ function matchIntent(t: string): Action | null {
     (m = t.match(/^(?:play|launch|start|boot up|fire up|load up)(?: the)? game (.+)$/)) ||
     (m = t.match(/^(?:play|launch|start|boot up|fire up|load up) (?:some |a bit of |a game of )?(.+?) game$/)) ||
     (m = t.match(/^let'?s play (?:some |a bit of )?(.+)$/)) ||
-    (m = t.match(/^(?:boot up|fire up|load up) (.+)$/))
+    // Speech recognition often drops the "up" in "fire up".
+    (m = t.match(/^(?:boot|fire|load)(?: up)? (.+)$/))
   ) {
     if (!/\b(?:blackjack|poker|chess|cards|with me|a game|something)\b/.test(m[1])) return validateAction({ type: 'game', name: titleCase(m[1]) })
   }
@@ -519,6 +520,20 @@ function tagToAction(name: string, arg: string): Action | null {
       const m = arg.match(/^([a-z_]+)\s+(.+)$/i)
       return m ? validateAction({ type: 'window', op: m[1].toLowerCase(), app: m[2] }) : null
     }
+    // Small models invent close variants of the tag names.
+    case 'open':
+    case 'launch_app':
+    case 'start_app':
+      return validateAction({ type: 'open_app', app: arg })
+    case 'search':
+    case 'google':
+      return validateAction({ type: 'web_search', query: arg })
+    case 'play':
+    case 'play_music':
+      return validateAction({ type: 'spotify', query: arg })
+    case 'launch':
+    case 'play_game':
+    case 'start_game':
     case 'launch_game':
     case 'game':
       return validateAction({ type: 'game', name: arg })
