@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { hasDedicatedGpu } from '../../shared/brainPick'
+import type { ScreenChoice } from '../../shared/screen'
 import { logConversation } from '../conversationLog'
 import { nativeBrainAvailable, nativeHardware } from './nativeBrain'
 
@@ -208,9 +209,31 @@ export function stopVision(): void {
   server = null
 }
 
-/** Takes a picture of the screen the mouse is on, shrunk, as a JPEG data URL. Never written to disk. */
-export async function captureScreen(): Promise<string> {
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+/** The display they asked about ("the right screen"), or the one the mouse is on. */
+function pickDisplay(choice: ScreenChoice): Electron.Display {
+  const all = screen.getAllDisplays()
+  const current = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  if (all.length < 2 || !choice) return current
+  const by = (f: (d: Electron.Display) => number) => all.reduce((a, b) => (f(b) < f(a) ? b : a))
+  switch (choice) {
+    case 'left':
+      return by((d) => d.bounds.x)
+    case 'right':
+      return by((d) => -(d.bounds.x + d.bounds.width))
+    case 'top':
+      return by((d) => d.bounds.y)
+    case 'bottom':
+      return by((d) => -(d.bounds.y + d.bounds.height))
+    case 'primary':
+      return screen.getPrimaryDisplay()
+    case 'other':
+      return all.find((d) => d.id !== current.id) ?? current
+  }
+}
+
+/** Takes a picture of a screen, shrunk, as a JPEG data URL. Never written to disk. */
+export async function captureScreen(choice: ScreenChoice = null): Promise<string> {
+  const display = pickDisplay(choice)
   const width = Math.min(SHOT_WIDTH, Math.round(display.size.width * display.scaleFactor))
   const height = Math.round((width * display.size.height) / display.size.width)
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } })

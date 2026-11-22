@@ -157,7 +157,9 @@ const EMOTION_ALIASES: Record<string, Emotion> = {
   afraid: 'scared', frightened: 'scared', terrified: 'scared', worried: 'scared', nervous: 'scared',
   embarrassed: 'flustered', shy: 'flustered',
   shocked: 'surprised', puzzled: 'confused', curious: 'confused', unsure: 'confused',
-  tired: 'sleepy', bored: 'sleepy', calm: 'neutral'
+  tired: 'sleepy', bored: 'sleepy', calm: 'neutral',
+  uncomfortable: 'flustered', awkward: 'flustered', anxious: 'scared', sorry: 'sad', hurt: 'sad', offended: 'angry',
+  delighted: 'happy', impressed: 'surprised', skeptical: 'confused', thinking: 'confused', sarcastic: 'smug'
 }
 
 /**

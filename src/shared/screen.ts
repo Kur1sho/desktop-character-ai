@@ -23,8 +23,27 @@ const ASKS_ABOUT_SCREEN = [
   // "help me with this", "how do I beat this boss", "what am I looking at"
   /\bhelp me with (?:this|what i'?m (?:doing|playing|looking at|reading))\b/,
   /\bwhat am i (?:looking at|playing|watching|reading)\b/,
-  /\bhow do i (?:beat|fix|solve|close|get past|do) (?:this|that)\b/
+  /\bhow do i (?:beat|fix|solve|close|get past|do) (?:this|that)\b/,
+  // "what's on the right screen", "read my second monitor"
+  /\b(?:left|right|other|second|2nd|main|first|top|bottom|primary|middle|big|small) (?:screen|monitor|display)\b/,
+  // Any question that mentions the screen: "what's the first video on youtube on my screen"
+  /^(?:what|whats|what's|how|why|who|where|which|when|can|could|would|do|does|is|are|tell me|read|find|describe|summari[sz]e|explain)\b.*\b(?:screen|monitor|display)s?\b/
 ]
+
+export type ScreenChoice = 'left' | 'right' | 'top' | 'bottom' | 'primary' | 'other' | null
+
+/** Which screen they mean, for PCs with more than one. Null means the one the mouse is on. */
+export function screenChoice(text: string): ScreenChoice {
+  const t = tidy(text)
+  const m = t.match(/\b(left|right|top|bottom|upper|lower|other|second|2nd|main|primary|first) (?:screen|monitor|display)\b/)
+  if (!m) return null
+  const w = m[1]
+  if (w === 'upper') return 'top'
+  if (w === 'lower') return 'bottom'
+  if (w === 'main' || w === 'primary' || w === 'first') return 'primary'
+  if (w === 'other' || w === 'second' || w === '2nd') return 'other'
+  return w as ScreenChoice
+}
 
 /** Not about seeing: saving a screenshot, brightness, locking. Those are normal commands. */
 const NOT_SEEING = /\bscreen ?shot|screen capture|brightness|dim (?:the |my )?screen|lock (?:the |my )?screen|full ?screen|screen ?saver|share (?:my |the )?screen/
