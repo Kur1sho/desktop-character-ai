@@ -1,0 +1,30 @@
+{
+  "name": "desktop-character-ai",
+  "productName": "Desktop Companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first animated desktop companion for Windows.",
+  "author": "Kur1sho",
+  "license": "UNLICENSED",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "electron": "^45.4.1",
+    "electron-vite": "^6.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "three": "^0.187.0"
+  }
+}

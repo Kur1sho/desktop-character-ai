@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+*.log
+.DS_Store
+# Character files are large; commit them on purpose with git add -f if wanted
+assets/characters/*.vrm
