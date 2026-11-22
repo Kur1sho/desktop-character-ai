@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canAlwaysAllow, extractActions, parseIntent, validateAction, wasRequested } from '../src/shared/actions'
+import { canAlwaysAllow, extractActions, parseIntent, parseIntents, validateAction, wasRequested } from '../src/shared/actions'
 import { clearGameMatch, parseAppManifest, parseLibraryFolders, pickGame, pickWindow } from '../src/shared/desktopMatch'
 import { clipboardRequest, COPIED_MARKER, withCopiedText } from '../src/shared/clipboard'
 import { shortenReply } from '../src/shared/brevity'
@@ -131,5 +131,26 @@ describe('misheard and sloppy requests', () => {
   it('accepts close variants of tag names from small models', () => {
     expect(extractActions('<<launch Minecraft>>').actions).toEqual([{ type: 'game', name: 'Minecraft' }])
     expect(extractActions('<<open Discord>>').actions).toEqual([{ type: 'open_app', app: 'Discord' }])
+  })
+})
+
+describe('chained commands', () => {
+  it('opens Spotify and plays a song as one step', () => {
+    expect(parseIntents('Hey Roboto, open spotify and play orpheus')).toEqual([{ type: 'spotify', query: 'orpheus' }])
+  })
+  it('runs two different commands in order', () => {
+    expect(parseIntents('set a timer for 5 minutes and then lock my pc')).toEqual([
+      { type: 'timer', seconds: 300, label: '' },
+      { type: 'system', op: 'lock' }
+    ])
+  })
+  it('keeps song names that contain "and"', () => {
+    expect(parseIntents('play salt and pepper')).toEqual([{ type: 'spotify', query: 'salt and pepper' }])
+  })
+  it('asks the AI when two apps are named at once', () => {
+    expect(parseIntents('open spotify and discord')).toBeNull()
+  })
+  it('still handles single commands', () => {
+    expect(parseIntents('switch to discord')).toEqual([{ type: 'window', op: 'focus', app: 'Discord' }])
   })
 })

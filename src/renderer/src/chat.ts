@@ -1,7 +1,7 @@
 // The speech bubble and text box above the character.
 import type { AskOptions, ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
-import { describeAction, extractActions, parseIntent, wasRequested, type Action } from '@shared/actions'
+import { describeAction, extractActions, parseIntents, wasRequested, type Action } from '@shared/actions'
 import { quickMath } from '@shared/quickMath'
 import { clipboardRequest, withCopiedText } from '@shared/clipboard'
 
@@ -123,10 +123,10 @@ export function createChat(
           return
         }
       }
-      const intent = clip ? null : parseIntent(text)
-      if (intent) {
-        log(`  -> understood as: ${describeAction(intent)} (no AI needed)`)
-        await onActions([intent], 'user')
+      const intents = clip ? null : parseIntents(text)
+      if (intents) {
+        log(`  -> understood as: ${intents.map(describeAction).join(', then ')} (no AI needed)`)
+        await onActions(intents, 'user')
         return
       }
       thinking()
