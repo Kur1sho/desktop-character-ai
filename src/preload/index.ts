@@ -12,6 +12,8 @@ const api: CompanionApi = {
   onPersonaChanged: (cb) => ipcRenderer.on(IPC.personaChanged, (_e, id) => cb(id)),
   getInitialModel: () => ipcRenderer.invoke(IPC.getInitialModel),
   chat: (text) => ipcRenderer.invoke(IPC.chat, text),
+  chatPrepare: (text) => ipcRenderer.invoke(IPC.chatPrepare, text),
+  chatRecord: (u, r) => ipcRenderer.invoke(IPC.chatRecord, u, r),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   saveSettings: (s) => ipcRenderer.invoke(IPC.saveSettings, s),
   setApiKey: (p, k) => ipcRenderer.invoke(IPC.setApiKey, p, k),

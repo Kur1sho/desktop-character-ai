@@ -1,4 +1,4 @@
-export type ProviderId = 'ollama' | 'anthropic' | 'openai' | 'openrouter' | 'gemini'
+export type ProviderId = 'builtin' | 'ollama' | 'anthropic' | 'openai' | 'openrouter' | 'gemini'
 
 export interface ProviderInfo {
   id: ProviderId
@@ -11,6 +11,13 @@ export interface ProviderInfo {
 }
 
 export const PROVIDERS: ProviderInfo[] = [
+  {
+    id: 'builtin',
+    label: 'Built-in (free, private, works offline)',
+    needsKey: false,
+    defaultModel: 'onnx-community/gemma-3-1b-it-ONNX',
+    modelHint: 'Runs on your PC. Downloads about 1 GB the first time, then works offline.'
+  },
   {
     id: 'ollama',
     label: 'Local (Ollama, free and private)',
@@ -71,7 +78,7 @@ export interface PublicSettings extends Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   personaId: 'robotico',
-  provider: 'ollama',
+  provider: 'builtin',
   models: {},
   ollamaUrl: 'http://127.0.0.1:11434',
   voiceOutput: true,

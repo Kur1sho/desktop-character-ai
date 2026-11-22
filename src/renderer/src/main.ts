@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
-import { getPersona } from '@shared/personas'
-import { DEFAULT_SETTINGS, type Settings } from '@shared/settings'
+import type { ChatReply } from '@shared/ipc'
+import { getPersona, parseEmotion } from '@shared/personas'
+import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
+import { think, warmUp } from './brain/brain'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
@@ -46,8 +48,25 @@ scene.add(stage)
 
 let character: Character | null = null
 let settings: Settings = { ...DEFAULT_SETTINGS }
+
+/** Sends a message to whichever AI is chosen. The built-in brain runs right here. */
+async function ask(text: string): Promise<ChatReply> {
+  if (!api) throw new Error('No app bridge')
+  if (settings.provider !== 'builtin') return api.chat(text)
+  const { system, history } = await api.chatPrepare(text)
+  try {
+    const raw = await think(modelFor(settings), [{ role: 'system', content: system }, ...history], (pct) =>
+      chat.status(`Downloading my brain (one time only)… ${pct}%`)
+    )
+    await api.chatRecord(text, raw)
+    return parseEmotion(raw)
+  } catch (err) {
+    return { emotion: 'sad', text: err instanceof Error ? err.message : String(err), error: true }
+  }
+}
+
 const chat = createChat(
-  api,
+  api ? ask : null,
   (emotion) => character?.setEmotion(emotion),
   (text) => {
     if (settings.voiceOutput) {
@@ -57,7 +76,10 @@ const chat = createChat(
 )
 
 async function refreshSettings(): Promise<void> {
-  if (api) settings = await api.getSettings()
+  if (!api) return
+  settings = await api.getSettings()
+  // Start fetching the built-in brain in the background so the first chat is quick.
+  if (settings.provider === 'builtin') warmUp(modelFor(settings))
 }
 
 // --- Voice: press the hotkey, talk, and it stops when you go quiet ---------

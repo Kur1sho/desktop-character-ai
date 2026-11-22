@@ -37,6 +37,22 @@ export function clearHistory(personaId: string): void {
   saveHistory(personaId, [])
 }
 
+/** The system prompt and history (with the new message) for the current character. */
+export function prepare(userText: string): { system: string; history: ChatTurn[] } {
+  const persona = getPersona(getSettings().personaId)
+  return { system: systemPrompt(persona), history: [...loadHistory(persona.id), { role: 'user', content: userText }] }
+}
+
+/** Saves an exchange that was answered outside the main process (the built-in brain). */
+export function record(userText: string, reply: string): void {
+  const persona = getPersona(getSettings().personaId)
+  saveHistory(persona.id, [
+    ...loadHistory(persona.id),
+    { role: 'user', content: userText },
+    { role: 'assistant', content: reply.trim() }
+  ])
+}
+
 export async function chat(userText: string): Promise<ChatReply> {
   const settings = getSettings()
   const persona = getPersona(settings.personaId)
@@ -46,7 +62,9 @@ export async function chat(userText: string): Promise<ChatReply> {
 
   try {
     let raw: string
-    if (settings.provider === 'ollama') {
+    if (settings.provider === 'builtin') {
+      throw new Error('The built-in brain runs in the companion window.')
+    } else if (settings.provider === 'ollama') {
       raw = await ollamaChat(req, settings.ollamaUrl)
     } else {
       const key = getApiKey(settings.provider)

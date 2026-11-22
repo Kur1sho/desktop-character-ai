@@ -1,5 +1,5 @@
 // The speech bubble and text box above the character.
-import type { CompanionApi } from '@shared/ipc'
+import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
 
 export interface ChatUi {
@@ -24,7 +24,7 @@ export function readingMs(text: string): number {
 }
 
 export function createChat(
-  api: CompanionApi | undefined,
+  askFn: ((text: string) => Promise<ChatReply>) | null,
   onEmotion: (e: Emotion) => void,
   onReply: (text: string) => void = () => {}
 ): ChatUi {
@@ -60,7 +60,7 @@ export function createChat(
   }
 
   async function ask(text: string): Promise<void> {
-    if (!api) {
+    if (!askFn) {
       show('(Running outside the app, so there is no AI to talk to.)', 4000, true)
       return
     }
@@ -68,7 +68,7 @@ export function createChat(
     busy = true
     thinking()
     try {
-      const reply = await api.chat(text)
+      const reply = await askFn(text)
       onEmotion(reply.emotion)
       show(reply.text || '…', readingMs(reply.text), Boolean(reply.error))
       if (!reply.error && reply.text) onReply(reply.text)

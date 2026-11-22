@@ -4,7 +4,7 @@ import { basename, join } from 'node:path'
 import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
-import { chat, clearHistory } from './ai/conversation'
+import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
 let win: BrowserWindow | null = null
@@ -162,6 +162,8 @@ ipcMain.handle(IPC.getInitialModel, () => {
 })
 
 ipcMain.handle(IPC.chat, (_e, text: string) => chat(String(text).slice(0, 2000)))
+ipcMain.handle(IPC.chatPrepare, (_e, text: string) => prepare(String(text).slice(0, 2000)))
+ipcMain.handle(IPC.chatRecord, (_e, userText: string, reply: string) => record(String(userText), String(reply)))
 ipcMain.handle(IPC.getSettings, () => getPublicSettings())
 ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
   const before = getSettings().personaId
