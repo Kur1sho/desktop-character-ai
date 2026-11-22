@@ -146,8 +146,11 @@ const chat = createChat(
     return true
   },
   api ? () => api.readClipboard() : undefined,
-  (line) => api?.logConversation(line)
+  (line) => api?.logConversation(line),
+  api ? (text) => api.lookAtScreen(text) : null
 )
+// "Downloading my eyes… 40%", "Looking…"
+api?.onVisionStatus((text) => chat.status(text))
 let speaking = false
 let thinking = false
 /** The request being handled was spoken, so the character can ask "yes or no?" out loud. */

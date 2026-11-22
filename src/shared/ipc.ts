@@ -28,7 +28,9 @@ export const IPC = {
   openConversationLog: 'log:open-conversation',
   openActivityLog: 'actions:open-log',
   brainWarmUp: 'brain:warm-up',
-  brainProgress: 'brain:progress'
+  brainProgress: 'brain:progress',
+  lookAtScreen: 'vision:look',
+  visionStatus: 'vision:status'
 } as const
 
 export interface AskOptions {
@@ -90,4 +92,8 @@ export interface CompanionApi {
   brainWarmUp(): Promise<{ mode: 'native' | 'web'; error?: string }>
   /** Download progress for brainWarmUp, 0 to 100. */
   onBrainProgress(cb: (percent: number) => void): void
+  /** Looks at the screen (only now, never saved) and answers a question about it. */
+  lookAtScreen(text: string): Promise<ChatReply>
+  /** "Downloading my eyes… 40%", "Looking…" while lookAtScreen works. */
+  onVisionStatus(cb: (text: string) => void): void
 }

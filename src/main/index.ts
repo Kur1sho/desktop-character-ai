@@ -21,7 +21,8 @@ import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
 import { activityLogPath, runAction } from './actions/runner'
 import { conversationLogPath, logConversation } from './conversationLog'
-import { chat, clearHistory, prepare, record } from './ai/conversation'
+import { chat, clearHistory, lookAtScreen, prepare, record } from './ai/conversation'
+import { stopVision } from './brain/vision'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 import { nativeBrainAvailable, stopNativeBrain, warmUpNativeBrain } from './brain/nativeBrain'
 
@@ -224,6 +225,11 @@ ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.readClipboard, async () => String(await clipboard.readText()).slice(0, 4000))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
+ipcMain.handle(IPC.lookAtScreen, (_e, text: unknown) => {
+  const question = String(text).slice(0, 1000)
+  logConversation('  -> looked at the screen (the picture is not saved)')
+  return lookAtScreen(question, (status) => win?.webContents.send(IPC.visionStatus, status))
+})
 ipcMain.handle(IPC.brainWarmUp, async () => {
   if (!(await nativeBrainAvailable())) return { mode: 'web' }
   try {
@@ -298,6 +304,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopNativeBrain()
+  stopVision()
 })
 // The overlay is the app; closing the settings window shouldn't quit.
 app.on('window-all-closed', () => app.quit())
