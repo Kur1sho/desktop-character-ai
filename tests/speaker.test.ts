@@ -28,3 +28,13 @@ describe('pickVoice', () => {
     expect(pickVoice([], getPersona('robotico').voice)).toBeNull()
   })
 })
+
+describe('pickVoice accent', () => {
+  it('prefers a voice with the asked-for accent', () => {
+    const voices = [
+      { name: 'Microsoft George - English (United Kingdom)', lang: 'en-GB' },
+      { name: 'Microsoft Mark - English (United States)', lang: 'en-US' }
+    ]
+    expect(pickVoice(voices, { prefer: ['George', 'Mark'], gender: 'male', lang: 'en-US', pitch: 1, rate: 1 })?.lang).toBe('en-US')
+  })
+})
