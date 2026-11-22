@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Welcome</title>
+    <style>
+      :root { color-scheme: light dark; --accent: #1fb8b5; --muted: #6b7280; --line: #d6dae0; --card: #ffffff; --bg: #f4f6f8; }
+      @media (prefers-color-scheme: dark) { :root { --muted: #9aa3ae; --line: #3a4048; --card: #22262c; --bg: #181b1f; } }
+      body { margin: 0; padding: 28px; font: 14px/1.45 'Segoe UI', system-ui, sans-serif; background: var(--bg); }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      p.lead { margin: 0 0 20px; color: var(--muted); }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .tile {
+        background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+        display: flex; flex-direction: column; gap: 10px; min-height: 130px;
+      }
+      .tile .top { display: flex; align-items: center; gap: 10px; }
+      .badge { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 17px; flex: none; }
+      .tile .name { font-weight: 600; font-size: 15px; }
+      .tile .blurb { color: var(--muted); font-size: 12.5px; flex: 1; }
+      .tile button { width: 100%; padding: 9px; border-radius: 9px; border: 0; font: inherit; font-weight: 600; cursor: pointer; background: var(--accent); color: #fff; }
+      .tile button.connected { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+      .tile button:disabled { background: transparent; color: var(--muted); border: 1px dashed var(--line); cursor: default; }
+      .tile .err { color: #c0392b; font-size: 12px; }
+      .toggle { margin: 22px 0 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+      .toggle input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); }
+      .toggle b { display: block; }
+      .toggle span { color: var(--muted); font-size: 12.5px; }
+      .done { margin-top: 20px; display: flex; justify-content: flex-end; }
+      .done button { padding: 10px 26px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Welcome!</h1>
+    <p class="lead">Connect the things you use. Each one is a single click, and you can skip any of them.</p>
+    <div class="grid" id="grid"></div>
+    <label class="toggle">
+      <input id="autoApprove" type="checkbox" checked />
+      <div>
+        <b id="autoLabel">Do simple things without asking me</b>
+        <span>Opening apps, timers, searches, music and volume. Websites always ask. Everything is listed in the activity log.</span>
+      </div>
+    </label>
+    <div class="done"><button id="done">Done</button></div>
+    <script type="module" src="./src/welcome.ts"></script>
+  </body>
+</html>
