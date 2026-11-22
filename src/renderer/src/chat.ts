@@ -1,6 +1,9 @@
 // The speech bubble and text box above the character.
 import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
+import { extractActions, parseIntent, type Action } from '@shared/actions'
+
+export type Choice = 'allow' | 'always' | 'cancel'
 
 export interface ChatUi {
   /** Element that should catch the mouse while visible. */
@@ -15,6 +18,8 @@ export interface ChatUi {
   hide(): void
   /** Sends text to the character and shows the reply. */
   ask(text: string): Promise<void>
+  /** Asks the user to OK an action, with buttons. `answer` settles it from elsewhere (a spoken "yes"). */
+  confirm(question: string, canAlways: boolean): { choice: Promise<Choice>; answer(c: Choice): void }
 }
 
 /** Roughly how long to keep a reply on screen: 2.5s plus reading time. */
@@ -26,7 +31,9 @@ export function readingMs(text: string): number {
 export function createChat(
   askFn: ((text: string) => Promise<ChatReply>) | null,
   onEmotion: (e: Emotion) => void,
-  onReply: (text: string) => void = () => {}
+  onReply: (text: string) => void = () => {},
+  /** Runs actions: plain requests ("open Spotify") come from the user, tags in replies from the AI. */
+  onActions: (actions: Action[], source: 'user' | 'ai', intro?: string) => Promise<void> = async () => {}
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -66,12 +73,24 @@ export function createChat(
     }
     if (busy) return
     busy = true
-    thinking()
     try {
+      // Plain requests are handled straight away, without the AI.
+      const intent = parseIntent(text)
+      if (intent) {
+        await onActions([intent], 'user')
+        return
+      }
+      thinking()
       const reply = await askFn(text)
+      const { text: said, actions } = extractActions(reply.text)
       onEmotion(reply.emotion)
-      show(reply.text || '…', readingMs(reply.text), Boolean(reply.error))
-      if (!reply.error && reply.text) onReply(reply.text)
+      if (!reply.error && actions.length) {
+        // What the character said goes with the question, so it isn't lost.
+        await onActions(actions, 'ai', said)
+        return
+      }
+      show(said || '…', readingMs(said), Boolean(reply.error))
+      if (!reply.error && said) onReply(said)
     } catch (err) {
       show(String(err), 6000, true)
     } finally {
@@ -109,6 +128,37 @@ export function createChat(
       show(text, null)
     },
     hide,
-    ask
+    ask,
+    confirm(question, canAlways) {
+      let answer: (c: Choice) => void = () => {}
+      const choice = new Promise<Choice>((resolve) => {
+        const box = document.createElement('div')
+        const q = document.createElement('div')
+        q.textContent = question
+        const row = document.createElement('div')
+        row.className = 'choices'
+        let settled = false
+        answer = (c) => {
+          if (settled) return
+          settled = true
+          resolve(c)
+        }
+        const button = (label: string, c: Choice, cls: string) => {
+          const b = document.createElement('button')
+          b.textContent = label
+          b.className = cls
+          b.addEventListener('click', () => answer(c))
+          row.append(b)
+        }
+        button('Yes', 'allow', 'yes')
+        if (canAlways) button('Always', 'always', 'always')
+        button('No', 'cancel', 'no')
+        box.append(q, row)
+        show(box, null)
+        // Nothing runs without an answer: no answer in 30 seconds means no.
+        window.setTimeout(() => answer('cancel'), 30000)
+      })
+      return { choice, answer: (c) => answer(c) }
+    }
   }
 }

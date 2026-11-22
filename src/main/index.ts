@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, Tray } from 'electron'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
+import { activityLogPath, runAction } from './actions/runner'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
@@ -144,6 +145,7 @@ function createTray(): void {
       { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
       { label: 'Type (Ctrl+Shift+T)', click: openChat },
       { label: 'Settings…', click: openSettings },
+      { label: 'Activity log', click: openActivityLog },
       { label: 'Load VRM character…', click: () => void pickModel() },
       { type: 'separator' },
       { label: 'Quit', click: () => app.quit() }
@@ -173,6 +175,18 @@ ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
 })
 ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => setApiKey(provider, key))
 ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
+ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
+ipcMain.on(IPC.openActivityLog, () => openActivityLog())
+
+/** Opens the plain-text log of every action, so the user can see exactly what happened. */
+function openActivityLog(): void {
+  const file = activityLogPath()
+  if (!existsSync(file)) {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, '')
+  }
+  void shell.openPath(file)
+}
 ipcMain.on(IPC.openSettings, openSettings)
 
 app.whenReady().then(() => {

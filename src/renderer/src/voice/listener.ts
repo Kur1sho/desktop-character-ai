@@ -1,6 +1,6 @@
 // Records one spoken request from the microphone at 16 kHz (what Whisper
 // expects), stopping automatically when the user goes quiet.
-import { rms, Vad, type VadResult } from './vad'
+import { rms, Vad, type VadOptions, type VadResult } from './vad'
 import { acquireMic, releaseMic } from './mic'
 import { createSpeechDetector, SPEECH_FRAME, type SpeechDetector } from './speechDetector'
 
@@ -23,13 +23,14 @@ const FRAME = SPEECH_FRAME // samples per frame, 32 ms
  */
 export function listen(
   onLevel?: (level: number, state: VadResult, threshold: number) => void,
-  preRoll?: Float32Array | null
+  preRoll?: Float32Array | null,
+  vadOptions?: VadOptions
 ): Listening {
   let cancel = () => {}
   const result = new Promise<ListenResult>((resolve, reject) => {
     let finished = false
     const chunks: Float32Array[] = preRoll ? [preRoll] : []
-    const vad = new Vad()
+    const vad = new Vad(vadOptions)
     let haveMic = false
     let ctx: AudioContext | null = null
 

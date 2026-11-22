@@ -18,7 +18,9 @@ const api: CompanionApi = {
   saveSettings: (s) => ipcRenderer.invoke(IPC.saveSettings, s),
   setApiKey: (p, k) => ipcRenderer.invoke(IPC.setApiKey, p, k),
   clearMemory: () => ipcRenderer.invoke(IPC.clearMemory),
-  openSettings: () => ipcRenderer.send(IPC.openSettings)
+  openSettings: () => ipcRenderer.send(IPC.openSettings),
+  runAction: (a, source) => ipcRenderer.invoke(IPC.runAction, a, source),
+  openActivityLog: () => ipcRenderer.send(IPC.openActivityLog)
 }
 
 contextBridge.exposeInMainWorld('companion', api)

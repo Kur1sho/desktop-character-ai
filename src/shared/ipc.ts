@@ -1,4 +1,5 @@
 // Channel names and payloads shared by the main process, preload and renderer.
+import type { Action, ActionResult } from './actions'
 import type { Layout } from './layout'
 import type { Emotion } from './personas'
 import type { ProviderId, PublicSettings, Settings } from './settings'
@@ -20,7 +21,9 @@ export const IPC = {
   saveSettings: 'settings:save',
   setApiKey: 'settings:set-key',
   clearMemory: 'settings:clear-memory',
-  openSettings: 'settings:open'
+  openSettings: 'settings:open',
+  runAction: 'actions:run',
+  openActivityLog: 'actions:open-log'
 } as const
 
 export interface ChatReply {
@@ -60,4 +63,8 @@ export interface CompanionApi {
   setApiKey(provider: ProviderId, key: string | null): Promise<void>
   clearMemory(): Promise<void>
   openSettings(): void
+  /** Runs an action the user has confirmed. The main process checks it again first. */
+  runAction(action: Action, source: 'user' | 'ai'): Promise<ActionResult>
+  /** Opens the log of everything the character has done. */
+  openActivityLog(): void
 }

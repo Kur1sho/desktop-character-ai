@@ -8,6 +8,7 @@ import { think, warmUp } from './brain/brain'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
+import { createActions } from './actions'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
@@ -67,21 +68,54 @@ async function ask(text: string): Promise<ChatReply> {
   }
 }
 
+/** Says a line out loud if voice output is on. */
+function sayAloud(text: string): Promise<void> {
+  if (!settings.voiceOutput) return Promise.resolve()
+  speaking = true
+  return speak(text, getPersona(settings.personaId).voice, (open) => character?.setMouth(open)).finally(() => {
+    // A short grace period so the wake word doesn't hear the tail of our own voice.
+    setTimeout(() => (speaking = false), 600)
+  })
+}
+
 const chat = createChat(
   api ? ask : null,
   (emotion) => character?.setEmotion(emotion),
-  (text) => {
-    if (settings.voiceOutput) {
-      speaking = true
-      void speak(text, getPersona(settings.personaId).voice, (open) => character?.setMouth(open)).finally(() => {
-        // A short grace period so the wake word doesn't hear the tail of our own voice.
-        setTimeout(() => (speaking = false), 600)
-      })
-    }
-  }
+  (text) => void sayAloud(text),
+  (list, source, intro) => (actions ? actions.run(list, source, intro) : Promise.resolve())
 )
 let speaking = false
 let thinking = false
+/** The request being handled was spoken, so the character can ask "yes or no?" out loud. */
+let spokenRequest = false
+
+/** Listens for one short answer, like "yes" or "no". */
+function hear(): { result: Promise<string | null>; cancel(): void } | null {
+  if (listening) return null
+  const l = listen(undefined, null, { endSilenceMs: 700, noSpeechTimeoutMs: 6000, maxMs: 5000 })
+  listening = l
+  const result = l.result
+    .then(({ audio }) => (audio ? transcribe(audio, settings.sttSize) : null))
+    .catch(() => null)
+    .finally(() => {
+      if (listening === l) listening = null
+    })
+  return { result, cancel: () => l.cancel() }
+}
+
+const actions = api
+  ? createActions({
+      api,
+      chat,
+      settings: () => settings,
+      persona: () => getPersona(settings.personaId),
+      setEmotion: (e) => character?.setEmotion(e),
+      speak: sayAloud,
+      summon: () => summon(),
+      hear,
+      spokenRequest: () => spokenRequest
+    })
+  : null
 
 async function refreshSettings(): Promise<void> {
   if (!api) return
@@ -115,7 +149,11 @@ async function refreshSettings(): Promise<void> {
           // "Hey Robotico, how are you?" - the question came with the name.
           summon()
           thinking = true
-          void chat.ask(rest).finally(() => (thinking = false))
+          spokenRequest = true
+          void chat.ask(rest).finally(() => {
+            thinking = false
+            spokenRequest = false
+          })
         } else {
           // Start listening straight away, keeping what was already said.
           void startVoice(audio)
@@ -197,7 +235,11 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
       return chat.say("Sorry, I didn't catch that.")
     }
     thinking = true
-    await chat.ask(text).finally(() => (thinking = false))
+    spokenRequest = true
+    await chat.ask(text).finally(() => {
+      thinking = false
+      spokenRequest = false
+    })
   } catch (err) {
     listening = null
     character?.setEmotion('sad')

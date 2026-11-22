@@ -35,6 +35,13 @@
       #bubble .dots span:nth-child(2) { animation-delay: 0.2s; }
       #bubble .dots span:nth-child(3) { animation-delay: 0.4s; }
       @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+      #bubble .choices { display: flex; gap: 6px; margin-top: 8px; justify-content: center; }
+      #bubble .choices button {
+        font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 0; cursor: pointer;
+        background: #e8edf3; color: #1d2430;
+      }
+      #bubble .choices button.yes { background: #1fb8b5; color: #fff; }
+      #bubble .choices button:hover { filter: brightness(0.95); }
       #input {
         display: none; width: 240px; padding: 8px 12px; border-radius: 999px; border: 2px solid #1fb8b5;
         background: rgba(255, 255, 255, 0.97); color: #1d2430; font: inherit; outline: none;

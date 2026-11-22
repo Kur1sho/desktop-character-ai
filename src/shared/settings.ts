@@ -1,3 +1,4 @@
+import type { ActionType } from './actions'
 export type ProviderId = 'builtin' | 'ollama' | 'anthropic' | 'openai' | 'openrouter' | 'gemini'
 
 export interface ProviderInfo {
@@ -73,6 +74,8 @@ export interface Settings {
   sttSize: 'tiny' | 'base' | 'small'
   /** The one-time setup (downloading and preparing the local models) has finished. */
   setupDone: boolean
+  /** Kinds of action that run without asking each time. Empty by default. */
+  alwaysAllow: ActionType[]
 }
 
 /** What the settings screen sees. Keys never leave the main process; only whether one is saved. */
@@ -88,7 +91,8 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceOutput: true,
   wakeWord: true,
   sttSize: 'base',
-  setupDone: false
+  setupDone: false,
+  alwaysAllow: []
 }
 
 export function modelFor(settings: Settings): string {
