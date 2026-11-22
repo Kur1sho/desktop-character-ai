@@ -11,10 +11,12 @@ import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
-import { describeCancelled, describeList, pickToCancel } from '@shared/reminders'
+import { describeCancelled, describeList, parseReminderQuery, pickToCancel } from '@shared/reminders'
+import { createGameSession, judgePrompt, readJudgement } from '@shared/games'
+import { screenRequest } from '@shared/screen'
 import { listenToMusic, type MusicListener } from './dance/music'
 import { approachAngle, Choreographer, MoodTracker, type Mood, type Pose } from './dance/choreo'
-import { parseDanceCommand } from '@shared/actions'
+import { parseDanceCommand, parseIntents } from '@shared/actions'
 import { createRobotico } from './robotico'
 import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
@@ -134,10 +136,31 @@ function sayAloud(text: string): Promise<void> {
   })
 }
 
+const games = createGameSession(
+  () => ({
+    personaId: settings.personaId,
+    rng: Math.random,
+    // Twenty questions: the brain answers yes or no about the secret.
+    judge: async (secret, question) => {
+      const r = await ask(judgePrompt(secret, question), { oneOff: true })
+      if (r.error) return null
+      const answer = readJudgement(r.text)
+      return answer ? { answer, text: r.text } : null
+    }
+  }),
+  (text) => parseIntents(text) !== null || screenRequest(text) || parseReminderQuery(text) !== null
+)
+
 const chat = createChat(
   api ? ask : null,
   (emotion) => feel(emotion),
-  (text) => void sayAloud(text),
+  (text) => {
+    // In a game, after asking out loud, listen for the answer straight away (no "Hey <name>" needed).
+    const listenAfter = spokenRequest && games.active()
+    void sayAloud(text).then(() => {
+      if (listenAfter && games.active() && !listening && !chat.isThinking()) void startVoice()
+    })
+  },
   (list, source, intro) => (actions ? actions.run(list, source, intro) : Promise.resolve()),
   (text) => {
     const cmd = parseDanceCommand(text)
@@ -157,7 +180,8 @@ const chat = createChat(
         const gone = await api.cancelReminders(pickToCancel(list, q).map((r) => r.id))
         return describeCancelled(gone, q.kind, now)
       }
-    : null
+    : null,
+  api ? (text) => games.handle(text) : null
 )
 // "Downloading my eyes… 40%", "Looking…"
 api?.onVisionStatus((text) => chat.status(text))
