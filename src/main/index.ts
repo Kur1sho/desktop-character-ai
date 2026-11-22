@@ -20,6 +20,7 @@ import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
 import { activityLogPath, runAction } from './actions/runner'
+import { conversationLogPath, logConversation } from './conversationLog'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
@@ -184,6 +185,7 @@ function createTray(): void {
       { label: 'Type (Ctrl+Shift+T)', click: openChat },
       { label: 'Connections…', click: openWelcome },
       { label: 'Settings…', click: openSettings },
+      { label: 'What I heard (conversation log)', click: () => openLog(conversationLogPath()) },
       { label: 'Activity log', click: openActivityLog },
       { label: 'Load VRM character…', click: () => void pickModel() },
       { type: 'separator' },
@@ -217,10 +219,15 @@ ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.readClipboard, async () => String(await clipboard.readText()).slice(0, 4000))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
+ipcMain.on(IPC.logConversation, (_e, line: unknown) => logConversation(String(line)))
+ipcMain.on(IPC.openConversationLog, () => openLog(conversationLogPath()))
 
 /** Opens the plain-text log of every action, so the user can see exactly what happened. */
 function openActivityLog(): void {
-  const file = activityLogPath()
+  openLog(activityLogPath())
+}
+
+function openLog(file: string): void {
   if (!existsSync(file)) {
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, '')

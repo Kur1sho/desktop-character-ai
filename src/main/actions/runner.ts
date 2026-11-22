@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { bestAppMatch, describeAction, validateAction, type Action, type ActionResult } from '../../shared/actions'
 import { clearlyAGame, launchGame, startSteamGame, steamGames, systemAction, windowAction } from './desktop'
 import { pickGame } from '../../shared/desktopMatch'
+import { logConversation } from '../conversationLog'
 
 const isWindows = process.platform === 'win32'
 
@@ -242,6 +243,7 @@ async function playOnSpotify(query: string): Promise<ActionResult> {
 // --- Activity log -----------------------------------------------------------------
 
 function log(action: Action, result: ActionResult, source: string): void {
+  logConversation(`${result.ok ? 'Did' : 'Tried'}: ${describeAction(action)} -> ${result.message}`)
   try {
     const dir = join(app.getPath('userData'), 'activity')
     mkdirSync(dir, { recursive: true })
