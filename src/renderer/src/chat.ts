@@ -1,7 +1,7 @@
 // The speech bubble and text box above the character.
 import type { ChatReply } from '@shared/ipc'
 import type { Emotion } from '@shared/personas'
-import { extractActions, parseIntent, type Action } from '@shared/actions'
+import { extractActions, parseIntent, wasRequested, type Action } from '@shared/actions'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -101,9 +101,18 @@ export function createChat(
         return
       }
       thinking()
-      const reply = await askFn(text)
+      let reply = await askFn(text)
       if (mine !== generation) return // interrupted while thinking
-      const { text: said, actions } = extractActions(reply.text)
+      let { text: said, actions: tagged } = extractActions(reply.text)
+      let actions = tagged.filter((a) => wasRequested(a, text))
+      if (tagged.length && !actions.length) {
+        // The AI tried to do something nobody asked for (small models copy the
+        // example), so its words are about that too. Ask again for a plain chat reply.
+        reply = await askFn(`${text} (Just chat. Don't do anything on the computer.)`)
+        if (mine !== generation) return
+        ;({ text: said } = extractActions(reply.text))
+        actions = []
+      }
       onEmotion(reply.emotion)
       if (!reply.error && actions.length) {
         // What the character said goes with the question, so it isn't lost.
