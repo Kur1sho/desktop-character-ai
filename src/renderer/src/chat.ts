@@ -10,6 +10,8 @@ export interface ChatUi {
   /** Element that should catch the mouse while visible. */
   readonly el: HTMLElement
   isActive(): boolean
+  /** Waiting for the AI's reply (the "…" bubble is showing). */
+  isThinking(): boolean
   /** Moves the bubble so its bottom centre sits at this window point. */
   place(x: number, y: number): void
   openInput(): void
@@ -50,8 +52,11 @@ export function createChat(
   /** An open Yes/No question. Other messages show briefly, then it comes back. */
   let pending: { node: Node; answer: (c: Choice) => void } | null = null
 
+  let waiting = false
+
   function show(content: string | Node, ms: number | null, error = false): void {
     window.clearTimeout(hideTimer)
+    waiting = false
     bubble.replaceChildren(content)
     bubble.classList.toggle('error', error)
     bubble.classList.add('show')
@@ -61,6 +66,7 @@ export function createChat(
   }
 
   function hide(): void {
+    waiting = false
     bubble.classList.remove('show')
     onEmotion('neutral')
   }
@@ -70,6 +76,7 @@ export function createChat(
     dots.className = 'dots'
     dots.innerHTML = '<span>●</span><span>●</span><span>●</span>'
     show(dots, null)
+    waiting = true
   }
 
   function closeInput(): void {
@@ -127,6 +134,7 @@ export function createChat(
   return {
     el: root,
     isActive: () => bubble.classList.contains('show') || input.classList.contains('show'),
+    isThinking: () => waiting,
     place(x, y) {
       root.style.left = `${Math.round(x)}px`
       root.style.top = `${Math.round(y)}px`
@@ -179,6 +187,7 @@ export function createChat(
     },
     cancel() {
       generation++
+      waiting = false
       busy = false
       pending?.answer('dismissed')
     }

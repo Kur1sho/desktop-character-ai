@@ -3,14 +3,32 @@
 
 import { ACTION_PROMPT } from './actions'
 
-export type Emotion = 'neutral' | 'happy' | 'angry' | 'sad' | 'surprised' | 'flustered' | 'smug' | 'sleepy'
+export type Emotion =
+  | 'neutral'
+  | 'happy'
+  | 'laughing'
+  | 'excited'
+  | 'love'
+  | 'angry'
+  | 'sad'
+  | 'scared'
+  | 'surprised'
+  | 'confused'
+  | 'flustered'
+  | 'smug'
+  | 'sleepy'
 
 export const EMOTIONS: readonly Emotion[] = [
   'neutral',
   'happy',
+  'laughing',
+  'excited',
+  'love',
   'angry',
   'sad',
+  'scared',
   'surprised',
+  'confused',
   'flustered',
   'smug',
   'sleepy'
@@ -114,11 +132,15 @@ export function systemPrompt(persona: Persona): string {
 /** Splits "[happy] Hello!" into its emotion and text. Unknown or missing tags become neutral. */
 /** Close matches small models use instead of the listed emotions. */
 const EMOTION_ALIASES: Record<string, Emotion> = {
-  distressed: 'sad', upset: 'sad', worried: 'sad', disappointed: 'sad',
-  excited: 'happy', cheerful: 'happy', joyful: 'happy', proud: 'smug', confident: 'smug',
+  distressed: 'sad', upset: 'sad', disappointed: 'sad', crying: 'sad',
+  cheerful: 'happy', joyful: 'happy', glad: 'happy', proud: 'smug', confident: 'smug',
+  thrilled: 'excited', hyped: 'excited', amazed: 'excited',
+  laugh: 'laughing', amused: 'laughing', giggling: 'laughing', funny: 'laughing',
+  loving: 'love', adoring: 'love', affectionate: 'love', grateful: 'love',
   annoyed: 'angry', frustrated: 'angry', irritated: 'angry', grumpy: 'angry',
-  embarrassed: 'flustered', shy: 'flustered', nervous: 'flustered',
-  shocked: 'surprised', confused: 'surprised', curious: 'surprised',
+  afraid: 'scared', frightened: 'scared', terrified: 'scared', worried: 'scared', nervous: 'scared',
+  embarrassed: 'flustered', shy: 'flustered',
+  shocked: 'surprised', puzzled: 'confused', curious: 'confused', unsure: 'confused',
   tired: 'sleepy', bored: 'sleepy', calm: 'neutral'
 }
 

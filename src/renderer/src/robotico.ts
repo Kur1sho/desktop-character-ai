@@ -1,12 +1,13 @@
 // Placeholder Robotico built from simple shapes, so the app works before the
 // real Blender model exists. It follows the character sheet: off-white body,
-// teal accents, a screen face with pixel eyes, an orange antenna light and
+// teal accents, an LED screen face that shows any expression, an orange antenna light and
 // floating hands.
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { Emotion } from '@shared/personas'
 import type { Character } from './character'
 import { breath } from './idle'
+import { ACTIVITY_POPUPS, drawFace, FACE_H, FACE_W, POPUPS, type Activity } from './robotFace'
 
 const WHITE = 0xf3f1ec
 const TEAL = 0x1fb8b5
@@ -20,7 +21,6 @@ export function createRobotico(): Character {
   const plastic = new THREE.MeshStandardMaterial({ color: WHITE, roughness: 0.45, metalness: 0.05 })
   const trim = new THREE.MeshStandardMaterial({ color: TEAL, roughness: 0.4 })
   const screenMat = new THREE.MeshStandardMaterial({ color: SCREEN, roughness: 0.2, metalness: 0.3 })
-  const eyeMat = new THREE.MeshBasicMaterial({ color: TEAL })
   const glowMat = new THREE.MeshBasicMaterial({ color: ORANGE })
 
   // Everything above the feet bobs gently.
@@ -51,27 +51,24 @@ export function createRobotico(): Character {
   face.position.z = 0.2
   head.add(face)
 
-  const eyes: THREE.Mesh[] = []
-  for (const x of [-0.11, 0.11]) {
-    const eye = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.12, 0.01, 2, 0.02), eyeMat)
-    eye.position.set(x, 0.02, 0.225)
-    head.add(eye)
-    eyes.push(eye)
-  }
-
-  // Pink cheeks, shown when flustered.
-  const blushMat = new THREE.MeshBasicMaterial({ color: 0xff7aa8, transparent: true, opacity: 0 })
-  for (const x of [-0.17, 0.17]) {
-    const cheek = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.035, 0.01, 2, 0.015), blushMat)
-    cheek.position.set(x, -0.07, 0.226)
-    head.add(cheek)
-  }
-
-  // A pixel mouth on the screen; it opens while talking.
-  const mouth = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.03, 0.01, 2, 0.012), eyeMat)
-  mouth.position.set(0, -0.08, 0.225)
-  head.add(mouth)
+  // The face is a little LED screen drawn on a canvas, so it can show any expression.
+  const faceCanvas = document.createElement('canvas')
+  faceCanvas.width = FACE_W
+  faceCanvas.height = FACE_H
+  const faceCtx = faceCanvas.getContext('2d')!
+  const faceTex = new THREE.CanvasTexture(faceCanvas)
+  faceTex.colorSpace = THREE.SRGBColorSpace
+  faceTex.magFilter = THREE.NearestFilter // chunky pixels
+  faceTex.minFilter = THREE.LinearFilter
+  faceTex.generateMipmaps = false
+  const screenFaceMat = new THREE.MeshBasicMaterial({ map: faceTex, toneMapped: false })
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.44 * (FACE_H / FACE_W)), screenFaceMat)
+  screen.position.z = 0.2205
+  head.add(screen)
   let mouthOpen = 0
+
+  // Emoji that pop up beside his head and float away.
+  const popups = createPopups(head)
 
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), trim)
   antenna.position.y = 0.3
@@ -88,18 +85,10 @@ export function createRobotico(): Character {
     hands.push(hand)
   }
 
-  // Eye shape per emotion: [scaleY, rotation (inward tilt), y offset, colour].
-  const EYE_SHAPES: Record<Emotion, { sy: number; tilt: number; dy: number; color: number; bigger?: boolean }> = {
-    neutral: { sy: 1, tilt: 0, dy: 0, color: TEAL },
-    happy: { sy: 0.4, tilt: 0, dy: 0.02, color: TEAL },
-    angry: { sy: 0.7, tilt: 0.45, dy: 0, color: 0xff5a4e },
-    sad: { sy: 0.75, tilt: -0.4, dy: -0.02, color: 0x6aa8ff },
-    surprised: { sy: 1.25, tilt: 0, dy: 0.01, color: TEAL, bigger: true },
-    flustered: { sy: 0.5, tilt: -0.15, dy: 0, color: 0xff8fb8 },
-    smug: { sy: 0.45, tilt: 0.2, dy: 0, color: TEAL },
-    sleepy: { sy: 0.25, tilt: 0, dy: -0.02, color: TEAL }
-  }
   let emotion: Emotion = 'neutral'
+  let emotionAt = 0
+  let activity: Activity = 'idle'
+  let nextActivityPopup = 0
   let blink = 0
 
   const headTarget = new THREE.Euler()
@@ -121,28 +110,42 @@ export function createRobotico(): Character {
       blink = amount
     },
     setEmotion(next) {
+      if (next === emotion) return
       emotion = next
+      emotionAt = clock
+      const options = POPUPS[next]
+      if (options) popups.show(options[Math.floor(Math.random() * options.length)], clock)
+    },
+    setActivity(next) {
+      if (next === activity) return
+      activity = next
+      nextActivityPopup = clock + 0.3
+    },
+    emote(emoji) {
+      popups.show(emoji, clock)
     },
     setMouth(open) {
       mouthOpen = open
     },
     update(dt, time) {
       clock = time
-      const shape = EYE_SHAPES[emotion]
-      const ek = 1 - Math.exp(-dt * 12)
-      eyes.forEach((e, i) => {
-        const side = i === 0 ? -1 : 1
-        const targetSy = Math.max(0.08, shape.sy * (1 - blink))
-        e.scale.y += (targetSy - e.scale.y) * ek
-        const s = shape.bigger ? 1.25 : 1
-        e.scale.x += (s - e.scale.x) * ek
-        e.rotation.z += (side * -shape.tilt - e.rotation.z) * ek
-        e.position.y += (0.02 + shape.dy - e.position.y) * ek
+      drawFace(faceCtx, {
+        emotion,
+        activity,
+        blink,
+        mouth: mouthOpen,
+        time,
+        lookX: head.rotation.y / 0.6,
+        lookY: -head.rotation.x / 0.35,
+        since: time - emotionAt
       })
-      eyeMat.color.lerp(new THREE.Color(shape.color), ek)
-      mouth.scale.y += (1 + mouthOpen * 2.6 - mouth.scale.y) * Math.min(1, dt * 25)
-      mouth.scale.x = emotion === 'happy' ? 1.2 : 1
-      blushMat.opacity += ((emotion === 'flustered' ? 0.9 : 0) - blushMat.opacity) * ek
+      faceTex.needsUpdate = true
+      const extra = ACTIVITY_POPUPS[activity]
+      if (extra && time >= nextActivityPopup) {
+        popups.show(extra[Math.floor(Math.random() * extra.length)], time)
+        nextActivityPopup = time + (activity === 'dancing' ? 1.4 : 2.5)
+      }
+      popups.update(time)
       const b = breath(time)
       body.position.y = 0.02 + b * 0.012
       const k = 1 - Math.exp(-dt * 8)
@@ -193,7 +196,79 @@ export function createRobotico(): Character {
       root.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose()
       })
-      for (const m of [plastic, trim, screenMat, eyeMat, glowMat, blushMat]) m.dispose()
+      for (const m of [plastic, trim, screenMat, screenFaceMat, glowMat]) m.dispose()
+      faceTex.dispose()
+      popups.dispose()
+    }
+  }
+}
+
+/** Emoji sprites that pop in beside the head, float up and fade. */
+function createPopups(parent: THREE.Object3D) {
+  const textures = new Map<string, THREE.CanvasTexture>()
+  const live: { sprite: THREE.Sprite; born: number; x: number }[] = []
+  const LIFE = 1.8
+  let side = 1
+
+  function texture(emoji: string): THREE.CanvasTexture {
+    let tex = textures.get(emoji)
+    if (!tex) {
+      const c = document.createElement('canvas')
+      c.width = c.height = 128
+      const ctx = c.getContext('2d')!
+      ctx.font = '100px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(emoji, 64, 70)
+      tex = new THREE.CanvasTexture(c)
+      tex.colorSpace = THREE.SRGBColorSpace
+      textures.set(emoji, tex)
+    }
+    return tex
+  }
+
+  return {
+    show(emoji: string, now: number) {
+      // Never more than a few at once.
+      while (live.length >= 3) {
+        const old = live.shift()!
+        parent.remove(old.sprite)
+        old.sprite.material.dispose()
+      }
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture(emoji), transparent: true, depthTest: false }))
+      sprite.renderOrder = 10
+      side = -side
+      const x = side * (0.36 + Math.random() * 0.06)
+      sprite.position.set(x, 0.22, 0.15)
+      sprite.scale.setScalar(0.001)
+      parent.add(sprite)
+      live.push({ sprite, born: now, x })
+    },
+    update(now: number) {
+      for (let i = live.length - 1; i >= 0; i--) {
+        const p = live[i]
+        const t = (now - p.born) / LIFE
+        if (t >= 1) {
+          parent.remove(p.sprite)
+          p.sprite.material.dispose()
+          live.splice(i, 1)
+          continue
+        }
+        // Pop in with a little overshoot, drift up and sway, then fade out.
+        const pop = t < 0.15 ? Math.sin((t / 0.15) * Math.PI * 0.75) / Math.sin(Math.PI * 0.75) : 1
+        p.sprite.scale.setScalar(0.2 * Math.max(0.001, pop))
+        p.sprite.position.y = 0.22 + t * 0.25
+        p.sprite.position.x = p.x + Math.sin(t * Math.PI * 3) * 0.02
+        p.sprite.material.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3
+      }
+    },
+    dispose() {
+      for (const p of live) {
+        parent.remove(p.sprite)
+        p.sprite.material.dispose()
+      }
+      live.length = 0
+      for (const t of textures.values()) t.dispose()
     }
   }
 }
