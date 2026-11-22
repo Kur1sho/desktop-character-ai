@@ -5,7 +5,6 @@ import { computeLayout } from '../shared/layout'
 import { IPC } from '../shared/ipc'
 import type { ProviderId, Settings } from '../shared/settings'
 import { activityLogPath, runAction } from './actions/runner'
-import { connectSpotify, disconnectSpotify, spotifyClientId } from './spotify'
 import { chat, clearHistory, prepare, record } from './ai/conversation'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 
@@ -202,13 +201,6 @@ ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => 
 ipcMain.handle(IPC.clearMemory, () => clearHistory(getSettings().personaId))
 ipcMain.handle(IPC.runAction, (_e, action: unknown, source: unknown) => runAction(action, source === 'ai' ? 'ai' : 'user'))
 ipcMain.on(IPC.openActivityLog, () => openActivityLog())
-ipcMain.handle(IPC.spotifyConnect, async (_e, clientId: unknown) => {
-  // The welcome screen sends nothing (one click, using the app's own ID); Settings can pass one for development.
-  const given = String(clientId ?? '').trim()
-  if (given) saveSettings({ ...getSettings(), spotifyClientId: given })
-  await connectSpotify(spotifyClientId())
-})
-ipcMain.handle(IPC.spotifyDisconnect, () => disconnectSpotify())
 
 /** Opens the plain-text log of every action, so the user can see exactly what happened. */
 function openActivityLog(): void {

@@ -41,7 +41,7 @@ export function getPublicSettings(): PublicSettings {
   const { settings, keys } = read()
   const hasKey: PublicSettings['hasKey'] = {}
   for (const p of PROVIDERS) hasKey[p.id] = Boolean(keys[p.id])
-  return { ...settings, hasKey, spotifyConnected: Boolean(read().secrets?.spotifyRefresh) }
+  return { ...settings, hasKey }
 }
 
 export function saveSettings(next: Settings): void {

@@ -20,9 +20,7 @@ const api: CompanionApi = {
   clearMemory: () => ipcRenderer.invoke(IPC.clearMemory),
   openSettings: () => ipcRenderer.send(IPC.openSettings),
   runAction: (a, source) => ipcRenderer.invoke(IPC.runAction, a, source),
-  openActivityLog: () => ipcRenderer.send(IPC.openActivityLog),
-  spotifyConnect: (id) => ipcRenderer.invoke(IPC.spotifyConnect, id),
-  spotifyDisconnect: () => ipcRenderer.invoke(IPC.spotifyDisconnect)
+  openActivityLog: () => ipcRenderer.send(IPC.openActivityLog)
 }
 
 contextBridge.exposeInMainWorld('companion', api)

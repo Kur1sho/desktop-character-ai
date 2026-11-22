@@ -24,10 +24,6 @@ const wakeName = $<HTMLSpanElement>('wakeName')
 const alwaysAllow = $<HTMLDivElement>('alwaysAllow')
 const alwaysAllowBox = $<HTMLDivElement>('alwaysAllowBox')
 const autoApprove = $<HTMLInputElement>('autoApprove')
-const spotifyState = $<HTMLParagraphElement>('spotifyState')
-const spotifySetup = $<HTMLDetailsElement>('spotifySetup')
-const spotifyClientId = $<HTMLInputElement>('spotifyClientId')
-const spotifyConnect = $<HTMLButtonElement>('spotifyConnect')
 
 let current: PublicSettings
 
@@ -58,12 +54,6 @@ function render(): void {
   wakeName.textContent = PERSONAS.find((p) => p.id === current.personaId)?.name ?? 'Robotico'
   sttSize.value = current.sttSize
   autoApprove.checked = current.autoApprove
-  spotifyClientId.value = current.spotifyClientId
-  spotifySetup.style.display = current.spotifyConnected ? 'none' : ''
-  spotifyConnect.textContent = current.spotifyConnected ? 'Disconnect Spotify' : 'Connect Spotify'
-  spotifyState.textContent = current.spotifyConnected
-    ? 'Connected. "Play lofi" plays it straight away.'
-    : 'Not connected: "play lofi" opens the search in Spotify. Connect it so your character can press play (needs Spotify Premium).'
   alwaysAllowBox.style.display = current.autoApprove ? 'none' : ''
   alwaysAllow.replaceChildren(
     ...ACTION_TYPES.filter((t) => CAN_ALWAYS_ALLOW.has(t)).map((t) => {
@@ -120,25 +110,6 @@ autoApprove.addEventListener('change', () => {
   render()
 })
 
-spotifyConnect.addEventListener('click', async () => {
-  try {
-    if (current.spotifyConnected) {
-      await api.spotifyDisconnect()
-      flash('Spotify disconnected.')
-    } else {
-      flash('Approve it in your browser…')
-      await api.spotifyConnect(spotifyClientId.value)
-      flash('Spotify connected!')
-    }
-    const fresh = await api.getSettings()
-    current.spotifyConnected = fresh.spotifyConnected
-    current.spotifyClientId = fresh.spotifyClientId
-    render()
-  } catch (err) {
-    flash(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err))
-  }
-})
-
 $('openLog').addEventListener('click', () => api.openActivityLog())
 
 $('clearMemory').addEventListener('click', async () => {
@@ -149,7 +120,7 @@ $('clearMemory').addEventListener('click', async () => {
 $('save').addEventListener('click', async () => {
   try {
     if (key.value.trim()) await api.setApiKey(current.provider, key.value.trim())
-    const { hasKey: _hasKey, spotifyConnected: _sc, ...settings } = current
+    const { hasKey: _hasKey, ...settings } = current
     await api.saveSettings(settings)
     current = await api.getSettings()
     render()
