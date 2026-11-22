@@ -24,6 +24,8 @@ export const IPC = {
   openSettings: 'settings:open',
   runAction: 'actions:run',
   readClipboard: 'actions:read-clipboard',
+  logConversation: 'log:conversation',
+  openConversationLog: 'log:open-conversation',
   openActivityLog: 'actions:open-log'
 } as const
 
@@ -68,6 +70,10 @@ export interface CompanionApi {
   runAction(action: Action, source: 'user' | 'ai'): Promise<ActionResult>
   /** The text the user copied. Only called when they ask about it. */
   readClipboard(): Promise<string>
+  /** Adds a line to the conversation log (what was heard and decided). */
+  logConversation(line: string): void
+  /** Opens the conversation log. */
+  openConversationLog(): void
   /** Opens the log of everything the character has done. */
   openActivityLog(): void
 }

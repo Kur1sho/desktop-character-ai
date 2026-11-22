@@ -110,7 +110,8 @@ const chat = createChat(
     else stopDancing(true)
     return true
   },
-  api ? () => api.readClipboard() : undefined
+  api ? () => api.readClipboard() : undefined,
+  (line) => api?.logConversation(line)
 )
 let speaking = false
 let thinking = false
@@ -178,6 +179,7 @@ async function refreshSettings(): Promise<void> {
         interrupt()
         if (!audio && rest.split(' ').length >= 2) {
           // "Hey Robotico, how are you?" - the question came with the name.
+          api?.logConversation(`Heard (wake word): "${rest}"`)
           summon()
           thinking = true
           spokenRequest = true
@@ -342,6 +344,7 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
     // If this started from the wake word, drop the "Hey <name>" part.
     const wake = preRoll ? matchWakeWord(heard, getPersona(settings.personaId).name) : null
     const text = wake?.matched && wake.rest ? wake.rest : heard
+    api?.logConversation(`Heard (voice): "${heard}"${text !== heard ? ` -> using "${text}"` : ''}`)
     if (!text || /^\[.*\]$/.test(text)) {
       feel('sad')
       return chat.say("Sorry, I didn't catch that.")

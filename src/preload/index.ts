@@ -21,6 +21,8 @@ const api: CompanionApi = {
   openSettings: () => ipcRenderer.send(IPC.openSettings),
   runAction: (a, source) => ipcRenderer.invoke(IPC.runAction, a, source),
   readClipboard: () => ipcRenderer.invoke(IPC.readClipboard),
+  logConversation: (line) => ipcRenderer.send(IPC.logConversation, line),
+  openConversationLog: () => ipcRenderer.send(IPC.openConversationLog),
   openActivityLog: () => ipcRenderer.send(IPC.openActivityLog)
 }
 
