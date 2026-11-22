@@ -291,6 +291,53 @@ export function parseIntent(input: string): Action | null {
   return null
 }
 
+/** Words that join commands: "open Spotify and play Faint", "set a timer, then lock my PC". */
+const CHAIN = /\s*,?\s+(?:and then|and also|then|after that|and)\s+/
+
+/** The text with a (possibly misheard) greeting taken off: "hey robert tico, ..." -> several guesses. */
+function withoutGreeting(t: string): string[] {
+  const m = t.match(/^(?:hey|hi|hello|ok|okay|yo|oi|um|uh|so)\b,?\s*(.*)$/)
+  if (!m) return []
+  const words = m[1].split(' ')
+  const out: string[] = []
+  for (let drop = 0; drop <= 2 && drop < words.length; drop++) out.push(tidy(words.slice(drop).join(' ')))
+  return out.filter(Boolean)
+}
+
+/** A name that swallowed a second command ("Spotify And Play Orpheus") or two apps ("Spotify And Discord"). */
+function joinedName(a: Action): boolean {
+  const name = a.type === 'open_app' || a.type === 'window' ? a.app : a.type === 'game' ? a.name : ''
+  return / and | then /i.test(name)
+}
+
+/**
+ * Plain requests the app understands without the AI, including several at
+ * once ("open Spotify and play Orpheus"). Null lets the AI answer.
+ */
+export function parseIntents(input: string): Action[] | null {
+  const t = tidy(input)
+  if (!t || t.split(' ').length > 24) return null
+  for (const c of [t, ...withoutGreeting(t)]) {
+    const parts = c.split(CHAIN).map(tidy).filter(Boolean)
+    if (parts.length < 2 || parts.length > 4) continue
+    const actions = parts.map(matchIntent)
+    if (actions.every((a): a is Action => a !== null && !joinedName(a))) return mergeChain(actions)
+  }
+  // "play salt and pepper": one command whose name happens to contain "and".
+  const one = parseIntent(input)
+  if (!one) return null
+  // "open Spotify and Discord" isn't one app: let the AI sort it out.
+  return joinedName(one) ? null : [one]
+}
+
+/** "Open Spotify and play X": playing already opens Spotify, so one step is enough. */
+function mergeChain(actions: Action[]): Action[] {
+  return actions.filter((a, i) => {
+    const next = actions[i + 1]
+    return !(a.type === 'open_app' && /^spotify$/i.test(a.app) && next?.type === 'spotify')
+  })
+}
+
 function matchIntent(t: string): Action | null {
 
   let m: RegExpMatchArray | null
