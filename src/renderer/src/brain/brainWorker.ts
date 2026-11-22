@@ -7,6 +7,7 @@ import {
   choiceKey,
   isGpuError,
   isNetworkError,
+  isWeakGpu,
   isThinkingModel,
   stripThinking,
   type BrainChoice
@@ -27,6 +28,8 @@ type OutMsg =
   | { type: 'ready'; device: string; model: string }
   /** This model and device didn't work on this PC, so don't try it next time. */
   | { type: 'failed'; key: string }
+  /** About to try a GPU brain. If the app dies before 'ready', the page counts it as a crash. */
+  | { type: 'trying'; key: string }
   /** The graphics chip crashed mid-reply: start a fresh worker and ask again. */
   | { type: 'restart'; id: number; message: string }
   | { type: 'result'; id: number; text: string }
@@ -44,8 +47,15 @@ let requestedModel = ''
 
 async function hasWebGpu(): Promise<boolean> {
   try {
-    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu
-    return Boolean(gpu && (await gpu.requestAdapter()))
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ info?: object } | null> } }).gpu
+    const adapter = gpu ? await gpu.requestAdapter() : null
+    if (!adapter) return false
+    const info = (adapter.info ?? {}) as { vendor?: string; architecture?: string; description?: string; isFallbackAdapter?: boolean }
+    if (isWeakGpu(info)) {
+      console.info('Using the processor for the brain: shared graphics', info.vendor, info.architecture)
+      return false
+    }
+    return true
   } catch {
     return false
   }
@@ -111,6 +121,7 @@ function load(model: string, failed: string[] = []): Promise<Loaded> {
     let lastErr: unknown = null
     for (const choice of candidates) {
       try {
+        if (choice.device === 'gpu') post({ type: 'trying', key: choiceKey(choice) })
         const gen = await withStrayErrors(loadOne(choice))
         post({ type: 'ready', device: choice.device, model: choice.model })
         return { gen, model: choice.model, choice }

@@ -8,6 +8,7 @@ import {
   type BrainChoice,
   isGpuError,
   isNetworkError,
+  isWeakGpu,
   isThinkingModel,
   maxTokensFor,
   stripThinking
@@ -71,4 +72,19 @@ it('spots the graphics chip crashing mid-reply', () => {
     )
   ).toBe(true)
   expect(isGpuError('Unexpected token in JSON')).toBe(false)
+})
+
+describe('isWeakGpu', () => {
+  it('uses the processor on shared Intel laptop graphics', () => {
+    expect(isWeakGpu({ vendor: 'intel', architecture: 'gen-12lp' })).toBe(true)
+    expect(isWeakGpu({ vendor: 'intel', architecture: 'xe2-lpg' })).toBe(true)
+  })
+  it('keeps the GPU for dedicated cards', () => {
+    expect(isWeakGpu({ vendor: 'nvidia', architecture: 'ada' })).toBe(false)
+    expect(isWeakGpu({ vendor: 'amd', architecture: 'rdna-3' })).toBe(false)
+    expect(isWeakGpu({ vendor: 'intel', architecture: 'xe-hpg' })).toBe(false)
+  })
+  it('never uses a software fallback', () => {
+    expect(isWeakGpu({ vendor: 'google', isFallbackAdapter: true })).toBe(true)
+  })
 })
