@@ -26,6 +26,7 @@ export const IPC = {
   setApiKey: 'settings:set-key',
   clearMemory: 'settings:clear-memory',
   openSettings: 'settings:open',
+  showMenu: 'companion:show-menu',
   runAction: 'actions:run',
   readClipboard: 'actions:read-clipboard',
   logConversation: 'log:conversation',
@@ -90,6 +91,8 @@ export interface CompanionApi {
   setApiKey(provider: ProviderId, key: string | null): Promise<void>
   clearMemory(): Promise<void>
   openSettings(): void
+  /** Shows the tray menu where the mouse is (right-clicking the character). */
+  showMenu(): void
   /** Runs an action the user has confirmed. The main process checks it again first. */
   runAction(action: Action, source: 'user' | 'ai'): Promise<ActionResult>
   /** The text the user copied. Only called when they ask about it. */

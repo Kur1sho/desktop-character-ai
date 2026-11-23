@@ -4,7 +4,7 @@
 import type { Emotion } from '@shared/personas'
 
 /** What he's doing, which can change the face whatever the emotion. */
-export type Activity = 'idle' | 'listening' | 'thinking' | 'dancing' | 'sleeping'
+export type Activity = 'idle' | 'listening' | 'thinking' | 'dancing' | 'sleeping' | 'glitch'
 
 export interface FaceState {
   emotion: Emotion
@@ -33,6 +33,7 @@ const COLORS: Record<Emotion, string> = {
   laughing: '#ffd44a',
   excited: '#ffd44a',
   love: '#ff6fa8',
+  dreamy: '#ff9fd2',
   angry: '#ff5a4e',
   sad: '#6aa8ff',
   scared: '#b48cff',
@@ -53,6 +54,7 @@ export const POPUPS: Partial<Record<Emotion, string[]>> = {
   confused: ['❓'],
   flustered: ['💦'],
   love: ['❤️', '💕'],
+  dreamy: ['💕', '✨', '💗'],
   excited: ['✨'],
   laughing: ['🤣'],
   sleepy: ['💤']
@@ -93,6 +95,11 @@ export function drawFace(ctx: CanvasRenderingContext2D, s: FaceState): void {
   ctx.scale(1.25, 1.25)
   ctx.translate(-60, -47)
 
+  if (s.activity === 'glitch') {
+    ctx.restore()
+    glitchFace(ctx, s)
+    return
+  }
   if (s.activity === 'thinking') {
     thinkingFace(ctx, s)
   } else {
@@ -124,6 +131,9 @@ function eyes(ctx: CanvasRenderingContext2D, s: FaceState): void {
         break
       case 'love':
         heart(ctx, c.x, c.y, 9 + Math.sin(s.time * 7) * 1.5)
+        break
+      case 'dreamy':
+        dreamyEye(ctx, c.x, c.y + Math.sin(s.time * 1.3) * 1.2, open, s.time, i)
         break
       case 'angry':
         block(ctx, c.x, c.y + 2, 13, 13 * open)
@@ -164,6 +174,57 @@ function eyes(ctx: CanvasRenderingContext2D, s: FaceState): void {
   }
 }
 
+/** Big, shiny, half-lidded eyes with sparkles that twinkle: gazing at someone special. */
+function dreamyEye(ctx: CanvasRenderingContext2D, x: number, y: number, open: number, time: number, i: number): void {
+  const h = 20 * Math.max(0.1, open)
+  roundRect(ctx, x - 8, y - h / 2, 16, h, Math.min(8, h / 2))
+  const lid = y - h / 2 + h * 0.38
+  ctx.save()
+  ctx.shadowBlur = 0
+  // Soft, heavy upper lids.
+  ctx.fillStyle = BG
+  ctx.fillRect(x - 10, y - h / 2 - 2, 20, lid - (y - h / 2) + 2)
+  // Sparkles in the eye.
+  ctx.fillStyle = '#fff4fb'
+  const tw = 0.8 + 0.2 * Math.sin(time * 3 + i * 2)
+  if (open > 0.4) {
+    dot(ctx, x - 3, lid + 3.5, 2.4 * tw)
+    dot(ctx, x + 3.5, y + h / 2 - 4, 1.2 * tw)
+  }
+  ctx.restore()
+  // The lid line, with a little lash flicking out at the corner.
+  const side = i === 0 ? -1 : 1
+  line(ctx, x - 9, lid, x + 9, lid, 2.5)
+  line(ctx, x + side * 9, lid, x + side * 12, lid - 3, 2)
+}
+
+/** No signal: static, a jittering bar and a "REBOOT" prompt. */
+function glitchFace(ctx: CanvasRenderingContext2D, s: FaceState): void {
+  const seed = Math.floor(s.time * 20)
+  const rnd = (n: number) => {
+    const v = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453
+    return v - Math.floor(v)
+  }
+  for (let k = 0; k < 220; k++) {
+    const g = Math.floor(rnd(k) * 160) + 40
+    ctx.fillStyle = `rgb(${g},${g},${g})`
+    ctx.fillRect(Math.floor(rnd(k + 500) * FACE_W), Math.floor(rnd(k + 900) * FACE_H), 2, 2)
+  }
+  const barY = Math.floor(rnd(7) * FACE_H)
+  ctx.fillStyle = 'rgba(45,224,220,0.5)'
+  ctx.fillRect(0, barY, FACE_W, 4)
+  if (Math.floor(s.time * 3) % 2 === 0) {
+    ctx.fillStyle = BG
+    ctx.fillRect(22, 30, 76, 20)
+    ctx.fillStyle = TEAL
+    ctx.font = 'bold 13px monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('REBOOT?', 60, 45)
+    ctx.textAlign = 'start'
+  }
+  scanlines(ctx)
+}
+
 function thinkingFace(ctx: CanvasRenderingContext2D, s: FaceState): void {
   // Eyes glance up and to the side, and a loading bar of dots runs below.
   for (const c of [L, R]) block(ctx, c.x + 5, c.y - 5, 10, 12 * (1 - s.blink))
@@ -183,6 +244,9 @@ function mouth(ctx: CanvasRenderingContext2D, s: FaceState): void {
     case 'happy':
     case 'love':
       arc(ctx, 60, y - 6, 8, Math.PI * 0.2, Math.PI * 0.8, 3)
+      break
+    case 'dreamy':
+      arc(ctx, 60, y - 5, 5, Math.PI * 0.2, Math.PI * 0.8, 2.5)
       break
     case 'laughing':
     case 'excited':
@@ -238,7 +302,17 @@ function listeningMouth(ctx: CanvasRenderingContext2D, s: FaceState): void {
 // --- Extras: blush, zzz, sparkles ------------------------------------------
 
 function extras(ctx: CanvasRenderingContext2D, s: FaceState, color: string): void {
-  if (s.emotion === 'flustered' || s.emotion === 'love') {
+  if (s.emotion === 'dreamy') {
+    // Little hearts drifting up out of the corner.
+    ctx.save()
+    for (const [x, ph] of [[100, 0], [16, 0.5]] as const) {
+      const p = (s.time * 0.3 + ph) % 1
+      ctx.globalAlpha = Math.sin(p * Math.PI)
+      heart(ctx, x + Math.sin(p * 9) * 2, 34 - p * 24, 3.5)
+    }
+    ctx.restore()
+  }
+  if (s.emotion === 'flustered' || s.emotion === 'love' || s.emotion === 'dreamy') {
     ctx.save()
     ctx.shadowBlur = 0
     ctx.strokeStyle = '#ff7aa8'

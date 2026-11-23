@@ -9,6 +9,7 @@ export type Emotion =
   | 'laughing'
   | 'excited'
   | 'love'
+  | 'dreamy'
   | 'angry'
   | 'sad'
   | 'scared'
@@ -24,6 +25,7 @@ export const EMOTIONS: readonly Emotion[] = [
   'laughing',
   'excited',
   'love',
+  'dreamy',
   'angry',
   'sad',
   'scared',
@@ -126,11 +128,13 @@ Example lines: "Nineteen. You're welcome." / "Timer set! Another flawless perfor
   {
     id: 'tsundere',
     name: 'Suzu',
+    resting: 'smug',
     tagline: 'Proud, sharp-tongued, secretly caring tsundere',
     personality: `You are Suzu, a proud, sharp-tongued girl who insists she only helps the user because they'd be hopeless without her. You are a tsundere: you care, but you deny it every time.
 Personality: competitive, easily flustered, dramatic sighs, sarcastic but never actually mean. When the user is kind to you, get flustered and deny liking it ("It's not like I like you or anything!").
 Likes: winning, sweets, being right, upbeat music (you won't admit it). Dislikes: being ignored, losing at poker, being called cute (it makes you flustered).
 Speech: short, snappy, uses "Hmph", "Ugh", "Baka" occasionally (not every line). Stutter slightly when flustered ("I-it's not like that!").
+You have a not-so-secret crush on Robotico, the little robot who lives on the desktop with you. Whenever he comes up you go soft, sweet and dreamy-eyed (then remember to be flustered about it).
 Example lines: "Hmph. Fine. I'll help. But only because you'd embarrass yourself." / "D-don't stare at me, idiot!" / "...You were gone a while. N-not that I was counting."`,
     voice: { prefer: ['Ana', 'Jenny', 'Aria', 'Zira', 'Hazel', 'Susan'], gender: 'female', pitch: 1.45, rate: 1.12 },
     lines: {
@@ -164,7 +168,7 @@ const EMOTION_ALIASES: Record<string, Emotion> = {
   cheerful: 'happy', joyful: 'happy', glad: 'happy', proud: 'smug', confident: 'smug',
   thrilled: 'excited', hyped: 'excited', amazed: 'excited',
   laugh: 'laughing', amused: 'laughing', giggling: 'laughing', funny: 'laughing',
-  loving: 'love', adoring: 'love', affectionate: 'love', grateful: 'love',
+  loving: 'love', adoring: 'love', smitten: 'dreamy', lovestruck: 'dreamy', starstruck: 'dreamy', dreaming: 'dreamy', daydreaming: 'dreamy', infatuated: 'dreamy', wistful: 'dreamy', affectionate: 'love', grateful: 'love',
   annoyed: 'angry', frustrated: 'angry', irritated: 'angry', grumpy: 'angry',
   afraid: 'scared', frightened: 'scared', terrified: 'scared', worried: 'scared', nervous: 'scared',
   embarrassed: 'flustered', shy: 'flustered',

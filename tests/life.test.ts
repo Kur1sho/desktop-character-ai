@@ -319,3 +319,52 @@ describe('walking past each other', () => {
     expect(front.z).toBeGreaterThan(0)
   })
 })
+
+describe('the friend following onto windows', () => {
+  it('stands beside the main character where there is room, and hops in an arc', async () => {
+    const { besideOn, hopAt, hopSeconds } = await import('../src/shared/walkLane')
+    const ledge = { id: 1, y: 500, left: 100, right: 900 }
+    expect(besideOn(ledge, 400, 160)).toBe(560)
+    expect(besideOn(ledge, 850, 160)).toBe(690)
+    // Stays on the side it's already on.
+    expect(besideOn(ledge, 400, 160, () => true, -1)).toBe(240)
+    // Too short for both side by side: squeezes in close.
+    const narrow = { id: 2, y: 500, left: 300, right: 420 }
+    const x = besideOn(narrow, 360, 160)
+    expect(x).toBeGreaterThanOrEqual(300)
+    expect(x).toBeLessThanOrEqual(420)
+    const from = { x: 100, y: 0 }
+    const to = { x: 200, y: 400 }
+    expect(hopAt(from, to, 0, 260)).toEqual(from)
+    expect(hopAt(from, to, 1, 260)).toEqual(to)
+    // Goes up higher than the ledge before landing on it.
+    expect(Math.max(...[0.6, 0.7, 0.8].map((p) => hopAt(from, to, p, 260).y))).toBeGreaterThan(400)
+    expect(hopSeconds(from, to, 260)).toBeLessThanOrEqual(0.9)
+  })
+})
+
+describe('doing things together', () => {
+  it('has sweet ones and robot ones, each beat done by someone, all inside its time', async () => {
+    const { DUOS, pickDuo, beatsBetween, doesBeat, restingFor } = await import('../src/shared/duo')
+    const names = Object.keys(DUOS)
+    expect(names).toEqual(expect.arrayContaining(['holdHands', 'headPat', 'reboot', 'sync', 'beeps']))
+    for (const plan of Object.values(DUOS)) {
+      for (const b of plan.beats) expect(b.at).toBeLessThan(plan.seconds)
+      expect(plan.close).toBeGreaterThan(0.5)
+      // Every beat is played exactly once over the whole thing, frame by frame.
+      let seen = 0
+      let last = -1
+      for (let t = 0; t <= plan.seconds; t += 1 / 60) {
+        seen += beatsBetween(plan, last, t).length
+        last = t
+      }
+      expect(seen).toBe(plan.beats.length)
+    }
+    expect(doesBeat({ at: 0, who: 'both' }, 'robotico')).toBe(true)
+    expect(doesBeat({ at: 0, who: 'tsundere' }, 'robotico')).toBe(false)
+    for (let i = 0; i < 30; i++) expect(pickDuo('heart')).not.toBe('heart')
+    expect(restingFor('tsundere', 'smug', true)).toBe('dreamy')
+    expect(restingFor('tsundere', 'smug', false)).toBe('smug')
+    expect(restingFor('robotico', 'happy', true)).toBe('happy')
+  })
+})

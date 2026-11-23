@@ -246,27 +246,33 @@ function changeSettings(change: Partial<Settings>): void {
 }
 
 function updateTrayMenu(): void {
-  if (!tray) return
-  const s = getSettings()
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
-      { label: 'Play a game', click: () => openGames('') },
-      { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
-      { label: 'Type (Ctrl+Shift+T)', click: openChat },
-      { label: 'Connections…', click: openWelcome },
-      { label: 'Settings…', click: openSettings },
-      { label: 'What I heard (conversation log)', click: () => openLog(conversationLogPath()) },
-      { label: 'Activity log', click: openActivityLog },
-      { label: 'Load VRM character…', click: () => void pickModel() },
-      { type: 'separator' },
-      { label: 'Mini mode', type: 'checkbox', checked: s.miniMode, click: (item) => changeSettings({ miniMode: item.checked }) },
-      { label: 'Bring a friend', type: 'checkbox', checked: s.friend, click: (item) => changeSettings({ friend: item.checked }) },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() }
-    ])
-  )
+  tray?.setContextMenu(buildMenu())
 }
+
+/** The menu from the tray icon, also shown when the character is right-clicked. */
+function buildMenu(): Menu {
+  const s = getSettings()
+  return Menu.buildFromTemplate([
+    { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
+    { label: 'Play a game', click: () => openGames('') },
+    { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
+    { label: 'Type (Ctrl+Shift+T)', click: openChat },
+    { label: 'Connections…', click: openWelcome },
+    { label: 'Settings…', click: openSettings },
+    { label: 'What I heard (conversation log)', click: () => openLog(conversationLogPath()) },
+    { label: 'Activity log', click: openActivityLog },
+    { label: 'Load VRM character…', click: () => void pickModel() },
+    { type: 'separator' },
+    { label: 'Mini mode', type: 'checkbox', checked: s.miniMode, click: (item) => changeSettings({ miniMode: item.checked }) },
+    { label: 'Bring a friend', type: 'checkbox', checked: s.friend, click: (item) => changeSettings({ friend: item.checked }) },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ])
+}
+
+ipcMain.on(IPC.showMenu, () => {
+  if (win) buildMenu().popup({ window: win })
+})
 
 ipcMain.on(IPC.setClickThrough, (_e, passThrough: boolean) => {
   win?.setIgnoreMouseEvents(passThrough, { forward: true })

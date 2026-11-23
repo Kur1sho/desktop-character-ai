@@ -14,7 +14,8 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 - Load any **VRM** model (VRoid Studio, Blender) from the tray menu, or drop one in `assets/characters/` to load it on start
 - Idle life: breathing, blinking, and the head follows your mouse
 - Drag the character left and right along the taskbar
-- Double-click the character, or click the tray icon, to summon it again
+- Double-click the character, or click the tray icon, to summon it again. Right-click the character for the same menu as the tray icon
+- **Bring a friend** (tray menu): Robotico and Suzu together. She follows him everywhere (hopping up onto windows after him), gazes at him all dreamy-eyed, and now and then they do something together: hold hands, make a heart, a head pat, a boop, leaning on each other, syncing antennas, chatting in beeps, sharing a battery, or a crash and reboot
 - **Talk to it**: click the character (or press Ctrl+Shift+T) and type. It answers in a speech bubble, in character, with matching facial expressions
 - **Understands typos**: typed messages are spell-checked on your PC first, so "opne spotfy", "set a timre for 5 minuts" and "remidn me tomorow" all work. It only fixes words it's sure about, and leaves names, songs and things to search for as you typed them
 - Two personalities: **Robotico** (loud, cocky little robot) and **Suzu** (tsundere, placeholder name)

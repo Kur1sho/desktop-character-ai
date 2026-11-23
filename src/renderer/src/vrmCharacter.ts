@@ -80,6 +80,7 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
     laughing: { happy: 1 },
     excited: { happy: 0.9, surprised: 0.3 },
     love: { happy: 0.8, relaxed: 0.3 },
+    dreamy: { relaxed: 0.7, happy: 0.4 },
     scared: { surprised: 0.6, sad: 0.5 },
     confused: { surprised: 0.3, sad: 0.2 },
     angry: { angry: 1 },
