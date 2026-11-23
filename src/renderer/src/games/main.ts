@@ -61,6 +61,8 @@ const ctx: GameCtx = {
   },
   say,
   react(moment, chance = 1) {
+    // A whole game won (not just a hand) counts towards unlocking hats.
+    if (moment === 'youWin' && chance >= 1) void api?.recordStat('wins')
     if (Math.random() > chance) return
     // Small moments don't talk over each other.
     if (chance < 1 && Date.now() - lastSpoken < 5000) return

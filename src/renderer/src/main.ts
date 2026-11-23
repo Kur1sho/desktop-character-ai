@@ -4,13 +4,14 @@ import type { CompanionApi } from '@shared/ipc'
 import type { AskOptions, ChatReply } from '@shared/ipc'
 import { EMOTIONS, getPersona, parseEmotion, type Emotion } from '@shared/personas'
 import { shortenReply } from '@shared/brevity'
-import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
+import { characterScale, DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
 import { think, warmUp } from './brain/brain'
 import { maxTokensFor } from '@shared/brainModels'
 import type { Character } from './character'
 import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
+import { createLife } from './life'
 import { describeCancelled, describeList, parseReminderQuery, pickToCancel } from '@shared/reminders'
 import { createGameSession, judgePrompt, parseWindowGame, readJudgement } from '@shared/games'
 import { gameLine } from '@shared/gameLines'
@@ -32,8 +33,10 @@ declare global {
   }
 }
 
-/** How tall the character is on screen, in CSS pixels. */
-const CHARACTER_PX = 260
+/** How tall the character is on screen at normal size, in CSS pixels. */
+const BASE_PX = 260
+/** How tall it is now (the size slider and mini mode change it). */
+let px = BASE_PX
 const POP_SECONDS = 0.7
 
 const api = window.companion
@@ -56,18 +59,34 @@ scene.add(sun)
 
 // The stage holds the character and is positioned at the anchor point.
 const stage = new THREE.Group()
+/** Swings the character round the point it's held by (when picked up with the mouse). */
+const hang = new THREE.Group()
+hang.position.y = BASE_PX / 2
+stage.add(hang)
+const hangInner = new THREE.Group()
+hangInner.position.y = -BASE_PX / 2
+hang.add(hangInner)
 /** Moves the character around when dancing (in pixels from its spot). */
 const dancer = new THREE.Group()
-stage.add(dancer)
+hangInner.add(dancer)
 /** Turns the character around its middle, for flips and spins. */
 const pivot = new THREE.Group()
-pivot.position.y = CHARACTER_PX / 2
+pivot.position.y = BASE_PX / 2
 dancer.add(pivot)
 /** Puts the character's feet back at the bottom, under the pivot. */
 const body = new THREE.Group()
-body.position.y = -CHARACTER_PX / 2
+body.position.y = -BASE_PX / 2
 pivot.add(body)
 scene.add(stage)
+
+/** Changes the character's size on screen. */
+function applySize(next: number): void {
+  if (next === px) return
+  px = next
+  pivot.position.y = px / 2
+  body.position.y = -px / 2
+  if (character) character.root.scale.setScalar(px / character.height)
+}
 
 let character: Character | null = null
 /** Shows an emotion; "neutral" means the character's resting face (a smile for cheerful Robotico). */
@@ -101,6 +120,7 @@ async function warmBrain(onProgress?: (pct: number) => void): Promise<void> {
 /** Sends a message to whichever AI is chosen. */
 async function ask(text: string, opts?: AskOptions): Promise<ChatReply> {
   if (!api) throw new Error('No app bridge')
+  if (!opts?.oneOff) void life.stat('chats')
   if (settings.provider !== 'builtin') return api.chat(text, opts)
   if (brainMode === null) {
     try {
@@ -239,9 +259,16 @@ const actions = api
 // Timers, reminders and alarms are kept by the main process; it tells us when one is due.
 api?.onReminderDue((r, late) => actions?.due(r, late))
 
+let greeted = false
 async function refreshSettings(): Promise<void> {
   if (!api) return
   settings = await api.getSettings()
+  applySize(Math.round(BASE_PX * characterScale(settings)))
+  life.settingsChanged()
+  if (settings.setupDone && !greeted) {
+    greeted = true
+    void life.greet()
+  }
   // Load everything now (the speech models and the built-in brain), so the
   // first "Hey ..." is as quick as every one after it.
   const progress: number[] = []
@@ -340,6 +367,7 @@ async function startDancing(): Promise<void> {
     return
   }
   danceStartedAt = performance.now()
+  void life.stat('dances')
   feel('happy')
   chat.say(lines.danceStart)
   void sayAloud(lines.danceStart)
@@ -352,6 +380,7 @@ function stopDancing(announce: boolean, line?: string): void {
   dancer.position.set(0, 0, 0)
   pivot.rotation.set(0, 0, 0)
   character?.dance(null)
+  life.dance(null)
   if (announce) {
     const text = line ?? getPersona(settings.personaId).lines.danceStop
     chat.say(text)
@@ -380,7 +409,7 @@ function danceFrame(): void {
     // Still working out the beat: a gentle sway so it's clearly listening.
     target = { x: 0, y: 0, rotX: 0, rotY: 0, rotZ: Math.sin(now / 400) * 0.04, arms: 'low' }
   } else {
-    target = choreographer.pose(s.count + s.phase, mood, CHARACTER_PX, s.intensity)
+    target = choreographer.pose(s.count + s.phase, mood, px, s.intensity)
   }
   // Ease toward the pose (angles the short way round), so moves blend into each other.
   const k = 0.35
@@ -389,7 +418,9 @@ function danceFrame(): void {
   pivot.rotation.x = approachAngle(pivot.rotation.x, target.rotX, k)
   pivot.rotation.y = approachAngle(pivot.rotation.y, target.rotY, k)
   pivot.rotation.z = approachAngle(pivot.rotation.z, target.rotZ, k)
-  character.dance({ phase: s.phase, count: s.count, intensity: s.intensity, arms: target.arms })
+  const move = { phase: s.phase, count: s.count, intensity: s.intensity, arms: target.arms }
+  character.dance(move)
+  life.dance(move)
 }
 
 /** Stops talking and drops anything in progress, so a new request starts cleanly. */
@@ -455,7 +486,6 @@ async function startVoice(preRoll: Float32Array | null = null): Promise<void> {
   }
 }
 let layout: Layout | null = null
-let anchorX = 0
 let popStart = -1
 const clock = new THREE.Timer()
 
@@ -479,32 +509,24 @@ function setCharacter(next: Character): void {
   }
   character = next
   feel('neutral')
-  const scale = CHARACTER_PX / next.height
-  next.root.scale.setScalar(scale)
+  next.root.scale.setScalar(px / next.height)
   body.add(next.root)
+  life.characterChanged()
   summon()
 }
 
 function summon(): void {
+  life.summoned()
   popStart = clock.getElapsed()
   character?.wave()
 }
 
-function floorY(): number {
-  // Window y runs top to bottom; the scene's y runs bottom to top.
-  return layout ? window.innerHeight - layout.anchor.y : 0
-}
-
-// --- Mouse: hover, click-through and dragging ----------------------------
+// --- Mouse: hover, click-through, pats, pokes and picking up ----------------
 let passThrough = true
-let dragging = false
-let dragOffset = 0
-let dragStartX = 0
-let movedWhileDragging = false
 const mouse = new THREE.Vector3(window.innerWidth / 2, window.innerHeight / 2, 400)
 
 function characterScreenBox(): THREE.Box2 | null {
-  if (!character) return null
+  if (!character || !stage.visible) return null
   const box = new THREE.Box3().setFromObject(character.root)
   return new THREE.Box2(
     new THREE.Vector2(box.min.x, window.innerHeight - box.max.y),
@@ -524,38 +546,50 @@ function setPassThrough(next: boolean): void {
   api?.setClickThrough(next)
 }
 
-window.addEventListener('mousemove', (e) => {
-  mouse.set(e.clientX, window.innerHeight - e.clientY, 400)
-  if (dragging && layout) {
-    if (Math.abs(e.clientX - dragStartX) > 4) movedWhileDragging = true
-    const min = layout.workArea.x + 40
-    const max = layout.workArea.x + layout.workArea.width - 40
-    anchorX = THREE.MathUtils.clamp(e.clientX - dragOffset, min, max)
-    return
-  }
-  const box = characterScreenBox()
-  const overCharacter = Boolean(box && box.containsPoint(new THREE.Vector2(e.clientX, e.clientY)))
-  setPassThrough(!(overCharacter || overChat(e.clientX, e.clientY)))
+const life = createLife({
+  api: api ?? null,
+  scene,
+  groups: { hang, hangInner, pivot, body },
+  character: () => character,
+  settings: () => settings,
+  px: () => px,
+  busy: () => chat.isEngaged() || listening !== null || thinking || setupRunning,
+  bubbleShowing: () => chat.isActive() || speaking,
+  dancing: () => music !== null,
+  say: (text, emotion) => {
+    feel(emotion)
+    chat.say(text)
+    return sayAloud(text)
+  },
+  feel: (e) => feel(e),
+  hideChat: () => {
+    chat.hide()
+    chat.closeInput()
+  },
+  summon: () => summon(),
+  setPassThrough,
+  overChat,
+  screenBox: characterScreenBox
 })
 
+// For trying the routines out from the developer tools: __companionLife.tryRoutine('peek')
+;(window as unknown as { __companionLife: unknown }).__companionLife = { tryRoutine: life.tryRoutine }
+
+window.addEventListener('mousemove', (e) => {
+  mouse.set(e.clientX, window.innerHeight - e.clientY, 400)
+  life.mouseMove(e)
+})
 window.addEventListener('mousedown', (e) => {
-  if (passThrough || e.button !== 0 || overChat(e.clientX, e.clientY)) return
-  dragging = true
-  movedWhileDragging = false
-  dragStartX = e.clientX
-  dragOffset = e.clientX - anchorX
+  if (!passThrough) life.mouseDown(e)
 })
-window.addEventListener('mouseup', () => {
-  if (!dragging) return
-  dragging = false
-})
-// Single click on the character opens the text box; double click waves.
+window.addEventListener('mouseup', () => life.mouseUp())
+// Single click on the character opens the text box, double click waves, and lots of clicks are poking.
 window.addEventListener('click', (e) => {
-  if (passThrough || overChat(e.clientX, e.clientY) || movedWhileDragging) return
-  openChat()
+  if (passThrough) return
+  if (!life.click(e)) openChat()
 })
 window.addEventListener('dblclick', (e) => {
-  if (!passThrough && !overChat(e.clientX, e.clientY)) summon()
+  if (!passThrough && life.dblclick(e)) summon()
 })
 
 function openChat(): void {
@@ -565,10 +599,11 @@ function openChat(): void {
 
 // --- Wiring to the main process ------------------------------------------
 api?.onLayout((next) => {
-  const first = layout === null
   layout = next
-  if (first) anchorX = next.anchor.x
+  life.layoutChanged(next)
 })
+// Whether you're at the PC (so it can nap while you're away) and any Steam game running.
+api?.onPresence((p) => life.presenceChanged(p))
 api?.onSummon(summon)
 api?.onOpenChat(() => {
   summon()
@@ -609,7 +644,7 @@ if (!api) {
     anchor: { x: Math.round(window.innerWidth * 0.5), y: window.innerHeight - 20 },
     workArea: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight - 20 }
   }
-  anchorX = layout.anchor.x
+  life.layoutChanged(layout)
 }
 
 // --- Frame loop ----------------------------------------------------------
@@ -617,30 +652,36 @@ renderer.setAnimationLoop(() => {
   clock.update()
   const dt = Math.min(clock.getDelta(), 0.1)
   const t = clock.getElapsed()
-  const floor = floorY()
+  const spot = life.frame(dt, t)
 
   // Pop up out of the taskbar: rise from below the floor with a little overshoot,
   // and clip anything below the floor so it looks like it comes out of the bar.
+  // (Sitting on a window, it just waves.)
   let rise = 0
   let clipping = false
   if (popStart >= 0) {
     const p = (t - popStart) / POP_SECONDS
-    if (p < 1) {
-      rise = (1 - easeOutBack(p)) * -CHARACTER_PX
+    if (p < 1 && spot.onFloor) {
+      rise = (1 - easeOutBack(p)) * -px
       clipping = true
-    } else {
+    } else if (p >= 1) {
       popStart = -1
     }
   }
-  stage.position.set(anchorX, floor + rise, 0)
+  const floor = spot.y
+  stage.position.set(spot.x, spot.y + rise, 0)
+  stage.visible = !life.hidden
 
   if (character) {
     // Keep the speech bubble just above the character's head.
-    const top = floor + rise + CHARACTER_PX + 12
-    chat.place(anchorX, window.innerHeight - top)
-    character.lookAt(mouse)
-    character.setBlink(blinkAmount(t))
-    character.setActivity?.(music ? 'dancing' : listening ? 'listening' : chat.isThinking() ? 'thinking' : 'idle')
+    const top = spot.y + rise + px + 12
+    // (kept on screen when it's right by the edge)
+    chat.place(THREE.MathUtils.clamp(spot.x, 150, window.innerWidth - 150), Math.max(70, window.innerHeight - top))
+    character.lookAt(life.lookTarget(mouse))
+    character.setBlink(life.asleep ? 1 : blinkAmount(t))
+    character.setActivity?.(
+      music ? 'dancing' : listening ? 'listening' : chat.isThinking() ? 'thinking' : life.asleep ? 'sleeping' : 'idle'
+    )
     character.update(dt, t)
     danceFrame()
   }

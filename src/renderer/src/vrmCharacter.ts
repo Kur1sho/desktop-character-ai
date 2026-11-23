@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm'
 import type { Emotion } from '@shared/personas'
-import type { Character, DanceMove } from './character'
+import type { BodyPose, Character, DanceMove } from './character'
 import { breath } from './idle'
 
 export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
@@ -95,6 +95,33 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
 
   let waveUntil = 0
   let clock = 0
+  let pose: BodyPose | null = null
+  let poseAt = 0
+
+  /** Arms and head for yawns, stretches, naps and being held. */
+  function applyPose(time: number): void {
+    const since = time - poseAt
+    const ease = (p: number) => Math.sin(Math.min(1, Math.max(0, p)) * Math.PI)
+    if (pose === 'stretch' || pose === 'held') {
+      const p = pose === 'held' ? 1 : ease(since / 2.6)
+      const flail = pose === 'held' ? Math.sin(time * 12) * 0.2 : 0
+      if (leftUpperArm) leftUpperArm.rotation.z = -1.2 + 2.2 * p + flail
+      if (rightUpperArm) rightUpperArm.rotation.z = 1.2 - 2.2 * p + flail
+    } else if (pose === 'yawn') {
+      const p = ease(since / 2.2)
+      if (rightUpperArm) rightUpperArm.rotation.z = 1.2 - 0.9 * p
+      if (rightLowerArm) rightLowerArm.rotation.y = 2 * p
+      if (neck) neck.rotation.x = -0.2 * p
+      vrm?.expressionManager?.setValue('aa', p)
+    } else if (pose === 'drum') {
+      const beat = time * 4
+      if (leftLowerArm) leftLowerArm.rotation.y = -1.2 - Math.abs(Math.sin(beat * Math.PI)) * 0.3
+      if (rightLowerArm) rightLowerArm.rotation.y = 1.2 + Math.abs(Math.sin((beat + 0.5) * Math.PI)) * 0.3
+    } else if (pose === 'sleep') {
+      if (neck) neck.rotation.x = 0.35
+      if (chest) chest.rotation.x = 0.1
+    }
+  }
 
   return {
     root,
@@ -134,12 +161,22 @@ export async function loadVrmCharacter(data: ArrayBuffer): Promise<Character> {
         weights[name] = (weights[name] ?? 0) + ((target[name] ?? 0) - (weights[name] ?? 0)) * k
         vrm.expressionManager?.setValue(name, weights[name])
       }
+      if (leftLowerArm) leftLowerArm.rotation.y = 0
+      if (rightLowerArm) rightLowerArm.rotation.y = 0
       if (danceMove) applyDance(danceMove)
-      else if (spine) spine.rotation.y = 0
+      else {
+        if (spine) spine.rotation.y = 0
+        applyPose(time)
+      }
       vrm.update(dt)
     },
     wave() {
       waveUntil = clock + 1.6
+    },
+    setPose(next) {
+      if (next === pose) return
+      pose = next
+      poseAt = clock
     },
     dance(move) {
       // Applied in update(), before the model's bones are refreshed.

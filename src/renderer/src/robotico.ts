@@ -5,7 +5,8 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { Emotion } from '@shared/personas'
-import type { Character } from './character'
+import type { BodyPose, Character } from './character'
+import type { Look } from '@shared/cosmetics'
 import { breath } from './idle'
 import { ACTIVITY_POPUPS, drawFace, FACE_H, FACE_W, POPUPS, type Activity } from './robotFace'
 
@@ -40,9 +41,12 @@ export function createRobotico(): Character {
   belly.position.set(0, 0.34, 0.17)
   body.add(belly)
 
+  // The neck tilts for yawns, stretches and naps; the head inside it turns to look around.
+  const neck = new THREE.Group()
+  neck.position.y = 0.78
+  body.add(neck)
   const head = new THREE.Group()
-  head.position.y = 0.78
-  body.add(head)
+  neck.add(head)
 
   const skull = new THREE.Mesh(new RoundedBoxGeometry(0.6, 0.44, 0.42, 6, 0.12), plastic)
   head.add(skull)
@@ -94,6 +98,74 @@ export function createRobotico(): Character {
   const headTarget = new THREE.Euler()
   let waveUntil = 0
   let clock = 0
+  let pose: BodyPose | null = null
+  let poseAt = 0
+  let hat: THREE.Object3D | null = null
+  let hatId = 'none'
+
+  const neckTarget = new THREE.Euler()
+  /** Moves the hands and neck for the current pose, on top of the normal idle motion. */
+  function posePass(dt: number, time: number, since: number): void {
+    neckTarget.set(0, 0, 0)
+    const [l, r] = hands
+    const ease = (p: number) => Math.sin(Math.min(1, Math.max(0, p)) * Math.PI)
+    switch (pose) {
+      case 'yawn': {
+        const p = ease(since / 2.2)
+        l.position.set(-0.34 + 0.24 * p, 0.34 + 0.34 * p, 0.04 + 0.2 * p)
+        neckTarget.x = -0.18 * p
+        break
+      }
+      case 'stretch': {
+        const p = ease(since / 2.6)
+        l.position.set(-0.34 + 0.1 * p, 0.34 + 0.86 * p, 0.04)
+        r.position.set(0.34 - 0.1 * p, 0.34 + 0.86 * p, 0.04)
+        body.scale.y = 1 + 0.05 * p
+        neckTarget.x = -0.12 * p
+        break
+      }
+      case 'drum': {
+        // Tapping on the taskbar in front of him, left and right in turn.
+        const beat = time * 4
+        const tap = (phase: number) => Math.abs(Math.sin((beat + phase) * Math.PI)) * 0.08
+        l.position.set(-0.2, 0.1 + tap(0), 0.24)
+        r.position.set(0.2, 0.1 + tap(0.5), 0.24)
+        neckTarget.x = 0.12 + Math.sin(beat * Math.PI) * 0.04
+        break
+      }
+      case 'sleep':
+        l.position.set(-0.3, 0.2, 0.08)
+        r.position.set(0.3, 0.2, 0.08)
+        body.position.y -= 0.02
+        neckTarget.x = 0.32
+        neckTarget.z = 0.12 + Math.sin(time * 0.8) * 0.02
+        break
+      case 'held':
+        // Dangling, waving the arms about.
+        l.position.set(-0.44, 0.62 + Math.sin(time * 13) * 0.06, 0.04)
+        r.position.set(0.44, 0.62 + Math.sin(time * 13 + 2) * 0.06, 0.04)
+        break
+      case 'swat': {
+        const p = Math.min(1, since / 0.35)
+        r.position.set(0.34 + 0.22 * Math.sin(p * Math.PI), 0.34 + 0.4 * Math.sin(p * Math.PI * 0.5), 0.04 + 0.15 * p)
+        break
+      }
+      case 'walk': {
+        const s = Math.sin(time * 10)
+        l.position.set(-0.36, 0.32, 0.04 + s * 0.08)
+        r.position.set(0.36, 0.32, 0.04 - s * 0.08)
+        break
+      }
+      case 'peek':
+        l.position.set(-0.3, 0.66, 0.2)
+        r.position.set(0.3, 0.66, 0.2)
+        break
+    }
+    if (pose !== 'stretch') body.scale.y += (1 - body.scale.y) * Math.min(1, dt * 10)
+    const k = 1 - Math.exp(-dt * 6)
+    neck.rotation.x += (neckTarget.x - neck.rotation.x) * k
+    neck.rotation.z += (neckTarget.z - neck.rotation.z) * k
+  }
 
   return {
     root,
@@ -127,13 +199,33 @@ export function createRobotico(): Character {
     setMouth(open) {
       mouthOpen = open
     },
+    setPose(next) {
+      if (next === pose) return
+      pose = next
+      poseAt = clock
+    },
+    setLook(look: Look) {
+      trim.color.setHex(look.trim)
+      plastic.color.setHex(look.body)
+      if (look.hat === hatId) return
+      if (hat) {
+        head.remove(hat)
+        disposeTree(hat)
+      }
+      hatId = look.hat
+      hat = makeHat(look.hat, look.trim)
+      if (hat) head.add(hat)
+    },
     update(dt, time) {
       clock = time
+      const since = time - poseAt
+      // A yawn opens the mouth wide by itself.
+      const yawnMouth = pose === 'yawn' ? Math.max(0, Math.sin(Math.min(1, since / 2.2) * Math.PI)) : 0
       drawFace(faceCtx, {
         emotion,
         activity,
         blink,
-        mouth: mouthOpen,
+        mouth: Math.max(mouthOpen, yawnMouth),
         time,
         lookX: head.rotation.y / 0.6,
         lookY: -head.rotation.x / 0.35,
@@ -162,6 +254,8 @@ export function createRobotico(): Character {
       } else {
         hands[1].position.set(0.34, 0.34 + Math.sin(time * 2.1 + 1) * 0.015, 0.04)
       }
+      posePass(dt, time, since)
+      if (hat && hatId === 'halo') hat.position.y = 0.5 + Math.sin(time * 2) * 0.015
     },
     wave() {
       waveUntil = clock + 1.6
@@ -197,10 +291,111 @@ export function createRobotico(): Character {
         if (o instanceof THREE.Mesh) o.geometry.dispose()
       })
       for (const m of [plastic, trim, screenMat, screenFaceMat, glowMat]) m.dispose()
+      if (hat) disposeTree(hat)
       faceTex.dispose()
       popups.dispose()
     }
   }
+}
+
+function disposeTree(o: THREE.Object3D): void {
+  o.traverse((x) => {
+    if (x instanceof THREE.Mesh) {
+      x.geometry.dispose()
+      ;(x.material as THREE.Material).dispose()
+    }
+  })
+}
+
+/** Builds a hat to sit on his head (head coordinates: the top of the head is at y 0.22). */
+export function makeHat(id: string, trimColor: number): THREE.Object3D | null {
+  const g = new THREE.Group()
+  const mat = (color: number, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...extra })
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z = 0) => {
+    const mesh = new THREE.Mesh(geo, m)
+    mesh.position.set(x, y, z)
+    g.add(mesh)
+    return mesh
+  }
+  switch (id) {
+    case 'party': {
+      add(new THREE.ConeGeometry(0.1, 0.24, 24), mat(0xff6fa8), 0, 0.12)
+      add(new THREE.SphereGeometry(0.035, 12, 8), mat(0xffffff), 0, 0.25)
+      add(new THREE.TorusGeometry(0.085, 0.012, 6, 24), mat(0xffd44a), 0, 0.03).rotation.x = Math.PI / 2
+      g.position.set(-0.15, 0.21, 0)
+      g.rotation.z = 0.28
+      break
+    }
+    case 'bow': {
+      const red = mat(0xff4f8b)
+      for (const side of [-1, 1]) {
+        const loop = add(new THREE.ConeGeometry(0.06, 0.13, 16), red, side * 0.07, 0)
+        loop.rotation.z = side * Math.PI / 2
+      }
+      add(new THREE.SphereGeometry(0.035, 12, 8), red, 0, 0)
+      g.position.set(-0.19, 0.24, 0.08)
+      g.rotation.z = 0.25
+      break
+    }
+    case 'beanie': {
+      const wool = mat(0x3f6fd8, { roughness: 0.9 })
+      const dome = add(new THREE.SphereGeometry(0.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), wool, 0, 0.12)
+      dome.scale.set(1.04, 0.62, 0.76)
+      add(new THREE.CylinderGeometry(0.315, 0.315, 0.07, 24, 1, true), mat(0x2f57b0, { roughness: 0.9, side: THREE.DoubleSide }), 0, 0.14).scale.z = 0.76
+      add(new THREE.SphereGeometry(0.05, 12, 8), mat(0xffffff, { roughness: 1 }), 0.13, 0.31)
+      break
+    }
+    case 'flower': {
+      const petal = mat(0xffa6c9)
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2
+        add(new THREE.SphereGeometry(0.035, 10, 8), petal, Math.cos(a) * 0.045, Math.sin(a) * 0.045)
+      }
+      add(new THREE.SphereGeometry(0.03, 10, 8), mat(0xffd44a), 0, 0, 0.01)
+      g.position.set(0.21, 0.22, 0.16)
+      break
+    }
+    case 'headphones': {
+      const dark = mat(0x2b2f36)
+      add(new THREE.TorusGeometry(0.33, 0.022, 8, 32, Math.PI), dark, 0, 0)
+      for (const side of [-1, 1]) {
+        const cup = add(new THREE.CylinderGeometry(0.09, 0.09, 0.07, 24), mat(trimColor), side * 0.33, 0)
+        cup.rotation.z = Math.PI / 2
+      }
+      break
+    }
+    case 'tophat': {
+      const black = mat(0x1d1f24, { roughness: 0.35 })
+      add(new THREE.CylinderGeometry(0.115, 0.12, 0.2, 24), black, 0, 0.11)
+      add(new THREE.CylinderGeometry(0.19, 0.19, 0.02, 32), black, 0, 0.01)
+      add(new THREE.CylinderGeometry(0.122, 0.122, 0.04, 24), mat(trimColor), 0, 0.04)
+      g.position.set(-0.14, 0.215, 0)
+      g.rotation.z = 0.16
+      break
+    }
+    case 'halo': {
+      const ring = add(new THREE.TorusGeometry(0.16, 0.018, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffe58a }), 0, 0)
+      ring.rotation.x = Math.PI / 2
+      g.position.set(0, 0.5, 0)
+      break
+    }
+    case 'crown': {
+      const gold = mat(0xf2c230, { metalness: 0.6, roughness: 0.3 })
+      add(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 24, 1, true), mat(0xf2c230, { metalness: 0.6, roughness: 0.3, side: THREE.DoubleSide }), 0, 0.04)
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2
+        add(new THREE.ConeGeometry(0.03, 0.07, 8), gold, Math.cos(a) * 0.12, 0.11, Math.sin(a) * 0.12)
+      }
+      add(new THREE.SphereGeometry(0.022, 10, 8), mat(0xff4f6b), 0, 0.04, 0.13)
+      g.position.set(-0.14, 0.215, 0)
+      g.rotation.z = 0.18
+      break
+    }
+    default:
+      return null
+  }
+  return g
 }
 
 /** Emoji sprites that pop in beside the head, float up and fade. */
