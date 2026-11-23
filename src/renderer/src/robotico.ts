@@ -164,6 +164,13 @@ export function createRobotico(): Character {
         l.position.set(-0.3, 0.66, 0.2)
         r.position.set(0.3, 0.66, 0.2)
         break
+      case 'hang':
+        // Both hands up over its head, holding on, kicking a little.
+        l.position.set(-0.1, 1.12, 0.02)
+        r.position.set(0.1, 1.12, 0.02)
+        neckTarget.x = -0.22
+        neckTarget.z = Math.sin(time * 5) * 0.06
+        break
       // Together with the friend. `near` is the hand on the friend's side.
       case 'hold': {
         // Reaches across and holds hands, swinging them a little.

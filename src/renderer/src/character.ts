@@ -12,6 +12,8 @@ export type BodyPose =
   | 'swat'
   | 'walk'
   | 'peek'
+  /** Hanging on by both hands, over its head. */
+  | 'hang'
   // With the friend (they need setPartner to know which side it's on):
   | 'hold'
   | 'heart'
