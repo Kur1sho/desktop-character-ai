@@ -6,6 +6,7 @@ import { quickMath } from '@shared/quickMath'
 import { clipboardRequest, withCopiedText } from '@shared/clipboard'
 import { screenRequest } from '@shared/screen'
 import { parseReminderQuery, type ReminderQuery } from '@shared/reminders'
+import type { GameReply } from '@shared/games'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -52,7 +53,9 @@ export function createChat(
   /** Looks at the screen and answers about it. Only called when the user asks about the screen. */
   lookAtScreen: ((text: string) => Promise<ChatReply>) | null = null,
   /** Answers "what reminders do I have?" and "cancel my timer". */
-  reminders: ((q: ReminderQuery) => Promise<string>) | null = null
+  reminders: ((q: ReminderQuery) => Promise<string>) | null = null,
+  /** Games ("let's play rock paper scissors"), and each move once one is going. */
+  game: ((text: string) => Promise<GameReply | null>) | null = null
 ): ChatUi {
   const root = document.getElementById('chat') as HTMLDivElement
   const bubble = document.getElementById('bubble') as HTMLDivElement
@@ -109,6 +112,15 @@ export function createChat(
       // Plain requests are handled straight away, without the AI.
       if (onLocal(text)) {
         log('  -> handled straight away (dancing)')
+        return
+      }
+      const played = game ? await game(text) : null
+      if (played) {
+        if (mine !== generation) return
+        log(`  -> game: ${played.say}`)
+        onEmotion(played.emotion)
+        show(played.say, readingMs(played.say))
+        onReply(played.say)
         return
       }
       // "Read / translate / explain what I copied": the clipboard is read only now, when asked.
