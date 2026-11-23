@@ -8,13 +8,14 @@ import type { Character, DanceMove } from './character'
 import { createRobotico } from './robotico'
 import { blinkAmount } from './idle'
 import { speak } from './voice/speaker'
+import { crossesMain, laneLook } from '@shared/walkLane'
 
 export interface Friend {
   readonly personaId: string
   /** Where its feet are (scene x). */
   readonly x: number
   /** near.x is the main character to stand beside, or null to stay put. */
-  frame(dt: number, t: number, near: { x: number | null; floor: number; px: number; left: number; right: number }, mouse: THREE.Vector3): void
+  frame(dt: number, t: number, near: { x: number | null; main: number; floor: number; px: number; left: number; right: number }, mouse: THREE.Vector3): void
   say(text: string, emotion: Emotion, aloud: boolean): Promise<void>
   feel(e: Emotion): void
   setAsleep(asleep: boolean): void
@@ -46,6 +47,9 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
   let asleep = false
   let dancing = false
   let mouth = 0
+  /** -1 behind the main character, 1 in front, 0 level with it. */
+  let depth = 0
+  let lane = 0
   const resting = persona.resting ?? 'neutral'
   character.setEmotion(resting)
   character.setLook?.(resolveLook(personaId, 'auto', 'auto', progress))
@@ -57,29 +61,36 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
       return x
     },
     frame(dt, t, near, mouse) {
-      if (near.px !== px) {
-        px = near.px
-        character.root.scale.setScalar((px * 0.92) / character.height)
-      }
+      if (near.px !== px) px = near.px
       // Stands beside the main character, on whichever side has room, and walks over when it moves.
       const gap = px * 0.62
       if (near.x !== null) {
         want = near.x + gap > near.right ? near.x - gap : near.x + gap
         if (x < 0) x = want
-      } else if (x < 0) x = want = (near.left + near.right) / 2
-      const step = 160 * (px / 260) * dt
+      } else if (x < 0) x = want = near.main + gap > near.right ? near.main - gap : near.main + gap
       const walking = Math.abs(want - x) > 4
+      // Passing the main character: step in front of it or behind it (picked each time), not through it.
+      // (Also when the main character walks past, or is dropped, where this one is standing.)
+      const crossing = crossesMain(x, want, near.main, px) || Math.abs(x - near.main) < px * 0.45
+      if (crossing && lane === 0) lane = Math.random() < 0.5 ? -1 : 1
+      if (!crossing) lane = 0
+      depth += Math.sign(lane - depth) * Math.min(Math.abs(lane - depth), dt * 3.5)
+      // Slows down to step aside first.
+      const aside = crossing && Math.abs(lane - depth) > 0.4 ? 0.3 : 1
+      const step = 160 * (px / 260) * dt * aside
       if (walking) x += Math.sign(want - x) * Math.min(step, Math.abs(want - x))
       x = Math.min(near.right, Math.max(near.left, x))
       const bob = walking ? Math.abs(Math.sin(t * 10)) * 3 : 0
-      stage.position.set(x, near.floor + bob, 0)
+      const look = laneLook(depth, px)
+      character.root.scale.setScalar((px * 0.92 * look.scale) / character.height)
+      stage.position.set(x, near.floor + bob + look.lift, look.z)
       if (!dancing) character.setPose?.(asleep ? 'sleep' : walking ? 'walk' : null)
       character.lookAt(mouse)
       character.setBlink(asleep ? 1 : blinkAmount(t, 1.7))
       character.setActivity?.(asleep ? 'sleeping' : dancing ? 'dancing' : 'idle')
       character.setMouth(mouth)
       character.update(dt, t)
-      const top = window.innerHeight - (near.floor + px * 0.92 + 12)
+      const top = window.innerHeight - (near.floor + look.lift + px * 0.92 * look.scale + 12)
       bubble.style.left = `${Math.min(window.innerWidth - 130, Math.max(130, x))}px`
       bubble.style.top = `${top}px`
     },

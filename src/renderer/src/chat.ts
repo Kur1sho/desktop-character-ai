@@ -7,6 +7,7 @@ import { clipboardRequest, withCopiedText } from '@shared/clipboard'
 import { screenRequest } from '@shared/screen'
 import { parseReminderQuery, type ReminderQuery } from '@shared/reminders'
 import type { GameReply } from '@shared/games'
+import { autocorrect } from '@shared/spelling/autocorrect'
 
 /** 'dismissed' means the question was dropped (the user started something new), so nothing is said. */
 export type Choice = 'allow' | 'always' | 'cancel' | 'dismissed'
@@ -218,9 +219,12 @@ export function createChat(
       return
     }
     if (e.key !== 'Enter' || busy) return
-    const text = input.value.trim()
-    if (!text) return
+    const typed = input.value.trim()
+    if (!typed) return
     input.value = ''
+    // Typos are fixed first, so "opne spotfy" works like "open spotify".
+    const { text, changes } = autocorrect(typed)
+    if (changes.length) log(`Typed: "${typed}" -> fixed spelling: ${changes.map((c) => `${c.from} -> ${c.to}`).join(', ')}`)
     void ask(text)
   })
 

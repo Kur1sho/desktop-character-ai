@@ -302,3 +302,20 @@ describe('size', () => {
     expect(characterScale({ size: 1.4, miniMode: true })).toBe(0.5)
   })
 })
+
+describe('walking past each other', () => {
+  it('knows when the friend would walk through the main character', async () => {
+    const { crossesMain, laneLook } = await import('../src/shared/walkLane')
+    expect(crossesMain(100, 500, 300, 260)).toBe(true)
+    expect(crossesMain(500, 100, 300, 260)).toBe(true)
+    expect(crossesMain(500, 700, 300, 260)).toBe(false)
+    expect(crossesMain(300, 300, 300, 260)).toBe(false)
+    const back = laneLook(-1, 260)
+    const front = laneLook(1, 260)
+    expect(back.scale).toBeLessThan(1)
+    expect(back.lift).toBeGreaterThan(0)
+    expect(back.z).toBeLessThan(0)
+    expect(front.scale).toBeGreaterThan(1)
+    expect(front.z).toBeGreaterThan(0)
+  })
+})
