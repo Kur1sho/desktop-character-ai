@@ -640,6 +640,7 @@ export function createLife(d: LifeDeps) {
       friend.setVisible(!hiddenForGame)
       friend.frame(dt, t, {
         x: onFloor() && routine?.name !== 'peek' ? body.x : null,
+        main: body.x,
         floor: H() - floorWinY(),
         px: d.px(),
         left: wa.x + d.px() * 0.25,
@@ -692,6 +693,11 @@ export function createLife(d: LifeDeps) {
     summoned,
     greet,
     stat,
+    /** The hat and colours being worn now. */
+    look() {
+      const s = d.settings()
+      return resolveLook(s.personaId, s.hat, s.color, progress)
+    },
     /** Where to look instead of the mouse (looking around, peeking), or null. */
     lookTarget(mouseVec: THREE.Vector3): THREE.Vector3 {
       return lookOverride ?? mouseVec

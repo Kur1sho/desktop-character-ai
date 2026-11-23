@@ -12,6 +12,7 @@ import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
 import { createLife } from './life'
+import { createTimerAlert } from './timerAlert'
 import { describeCancelled, describeList, parseReminderQuery, pickToCancel } from '@shared/reminders'
 import { createGameSession, judgePrompt, parseWindowGame, readJudgement } from '@shared/games'
 import { gameLine } from '@shared/gameLines'
@@ -253,7 +254,8 @@ const actions = api
       speak: sayAloud,
       summon: () => summon(),
       hear,
-      spokenRequest: () => spokenRequest
+      spokenRequest: () => spokenRequest,
+      timerAlert: (text) => timerAlert.show(text, life.look())
     })
   : null
 // Timers, reminders and alarms are kept by the main process; it tells us when one is due.
@@ -575,8 +577,12 @@ const life = createLife({
 // For trying the routines out from the developer tools: __companionLife.tryRoutine('peek')
 ;(window as unknown as { __companionLife: unknown }).__companionLife = { tryRoutine: life.tryRoutine }
 
+// The timer-over head in the corner: click it to stop the alarm.
+const timerAlert = createTimerAlert(scene, () => stopSpeaking())
+
 window.addEventListener('mousemove', (e) => {
   mouse.set(e.clientX, window.innerHeight - e.clientY, 400)
+  if (timerAlert.hit(e.clientX, e.clientY)) return setPassThrough(false)
   life.mouseMove(e)
 })
 window.addEventListener('mousedown', (e) => {
@@ -586,6 +592,7 @@ window.addEventListener('mouseup', () => life.mouseUp())
 // Single click on the character opens the text box, double click waves, and lots of clicks are poking.
 window.addEventListener('click', (e) => {
   if (passThrough) return
+  if (timerAlert.hit(e.clientX, e.clientY)) return timerAlert.dismiss()
   if (!life.click(e)) openChat()
 })
 window.addEventListener('dblclick', (e) => {
@@ -672,6 +679,7 @@ renderer.setAnimationLoop(() => {
   stage.position.set(spot.x, spot.y + rise, 0)
   stage.visible = !life.hidden
 
+  timerAlert.frame(t)
   if (character) {
     // Keep the speech bubble just above the character's head.
     const top = spot.y + rise + px + 12

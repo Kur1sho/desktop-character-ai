@@ -8,6 +8,8 @@ import type { Settings } from '@shared/settings'
 import type { ChatUi, Choice } from './chat'
 
 export interface ActionDeps {
+  /** Shows the timer-over alert (the head in the corner). Timers use it when there is one. */
+  timerAlert?: (text: string) => void
   api: CompanionApi
   chat: ChatUi
   settings: () => Settings
@@ -29,6 +31,14 @@ export function createActions(deps: ActionDeps) {
   /** A timer, reminder or alarm going off (they're kept by the main process, so they survive a restart). */
   function due(r: Reminder, late: boolean): void {
     const lines = deps.persona().lines
+    if (r.kind === 'timer' && deps.timerAlert) {
+      // The head pops up in the corner, red and flashing, and beeps until clicked.
+      const label = r.label ? ` ${r.label[0].toUpperCase()}${r.label.slice(1)}.` : ''
+      const text = `${late ? `${lines.missed} ` : ''}Timer over!${label}`
+      deps.timerAlert(text)
+      void deps.speak(text)
+      return
+    }
     deps.summon()
     deps.setEmotion('surprised')
     beep(r.kind === 'alarm' ? 4 : 1)
