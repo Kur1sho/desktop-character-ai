@@ -21,6 +21,7 @@ import { listenToMusic, type MusicListener } from './dance/music'
 import { approachAngle, Choreographer, MoodTracker, type Mood, type Pose } from './dance/choreo'
 import { parseDanceCommand, parseIntents } from '@shared/actions'
 import { createRobotico } from './robotico'
+import { restingFor } from '@shared/duo'
 import { loadVrmCharacter } from './vrmCharacter'
 import { listen, type Listening } from './voice/listener'
 import { speak, stopSpeaking } from './voice/speaker'
@@ -92,7 +93,8 @@ function applySize(next: number): void {
 let character: Character | null = null
 /** Shows an emotion; "neutral" means the character's resting face (a smile for cheerful Robotico). */
 function feel(e: Emotion): void {
-  character?.setEmotion(e === 'neutral' ? (getPersona(settings.personaId).resting ?? 'neutral') : e)
+  const resting = restingFor(settings.personaId, getPersona(settings.personaId).resting ?? 'neutral', settings.friend)
+  character?.setEmotion(e === 'neutral' ? resting : e)
 }
 let settings: Settings = { ...DEFAULT_SETTINGS }
 
@@ -267,6 +269,8 @@ async function refreshSettings(): Promise<void> {
   settings = await api.getSettings()
   applySize(Math.round(BASE_PX * characterScale(settings)))
   life.settingsChanged()
+  // Settles into the right resting face (Suzu goes dreamy when Robotico's out with her).
+  if (!thinking && !listening && !chat.isEngaged()) feel('neutral')
   if (settings.setupDone && !greeted) {
     greeted = true
     void life.greet()
@@ -575,7 +579,7 @@ const life = createLife({
 })
 
 // For trying the routines out from the developer tools: __companionLife.tryRoutine('peek')
-;(window as unknown as { __companionLife: unknown }).__companionLife = { tryRoutine: life.tryRoutine }
+;(window as unknown as { __companionLife: unknown }).__companionLife = { tryRoutine: life.tryRoutine, tryDuo: life.tryDuo, where: life.where }
 
 // The timer-over head in the corner: click it to stop the alarm.
 const timerAlert = createTimerAlert(scene, () => stopSpeaking())
@@ -586,7 +590,12 @@ window.addEventListener('mousemove', (e) => {
   life.mouseMove(e)
 })
 window.addEventListener('mousedown', (e) => {
-  if (!passThrough) life.mouseDown(e)
+  if (!passThrough && e.button === 0) life.mouseDown(e)
+})
+// Right-click the character for the same menu as the tray icon.
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault()
+  if (!passThrough && !timerAlert.hit(e.clientX, e.clientY)) api?.showMenu()
 })
 window.addEventListener('mouseup', () => life.mouseUp())
 // Single click on the character opens the text box, double click waves, and lots of clicks are poking.

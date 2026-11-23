@@ -19,6 +19,7 @@ const api: CompanionApi = {
   setApiKey: (p, k) => ipcRenderer.invoke(IPC.setApiKey, p, k),
   clearMemory: () => ipcRenderer.invoke(IPC.clearMemory),
   openSettings: () => ipcRenderer.send(IPC.openSettings),
+  showMenu: () => ipcRenderer.send(IPC.showMenu),
   runAction: (a, source) => ipcRenderer.invoke(IPC.runAction, a, source),
   readClipboard: () => ipcRenderer.invoke(IPC.readClipboard),
   logConversation: (line) => ipcRenderer.send(IPC.logConversation, line),

@@ -10,6 +10,8 @@ import type { Settings } from '@shared/settings'
 import { PatDetector, PokeCounter } from '@shared/pet'
 import { fallStep, holdStep, newBody, type World } from '@shared/physics'
 import { followWindow, surfaceAt, type WinRect } from '@shared/perch'
+import type { Ledge } from '@shared/walkLane'
+import { beatsBetween, doesBeat, DUOS, pickDuo, type Duo } from '@shared/duo'
 import { nextRoutineIn, pickRoutine, ROUTINE_SECONDS, type Routine } from '@shared/routines'
 import { AWAY_SEC, Chatter, type ChatterEvent, type Presence } from '@shared/chatter'
 import { greetingFor, lifeLine, type LifeMoment } from '@shared/lifeLines'
@@ -104,8 +106,11 @@ export function createLife(d: LifeDeps) {
   const mouse = { x: -1, y: -1, movedAt: 0 }
   let nextCursorPlay = now() + 90_000
 
-  // The friend.
+  // The friend, and the things they do together.
   let friend: Friend | null = null
+  let duo: { name: Duo; start: number; done: number } | null = null
+  let lastDuo: Duo | null = null
+  let nextHeart = now() + 20_000
   let lastBanter = -1
   let bantering = false
 
@@ -133,6 +138,19 @@ export function createLife(d: LifeDeps) {
     }
   }
 
+  /** The taskbar, as somewhere for the friend to stand. */
+  function floorLedge(): Ledge {
+    const wa = layout?.workArea ?? { x: 0, width: window.innerWidth }
+    return { id: null, y: H() - floorWinY(), left: wa.x + d.px() * 0.25, right: wa.x + wa.width - d.px() * 0.25 }
+  }
+  /** A window's top edge as somewhere for the friend to stand, or null if it's gone or too high. */
+  function ledgeOf(id: number): Ledge | null {
+    const w = wins.find((x) => x.id === id)
+    if (!w || w.y < minTop() || w.y >= floorWinY() - 4) return null
+    const inset = Math.min(d.px() * 0.18, w.width / 2 - 1)
+    return { id, y: H() - w.y, left: w.x + inset, right: w.x + w.width - inset }
+  }
+
   const onFloor = () => !held && !falling && perch === null && Math.abs(body.y - (H() - floorWinY())) < 1
 
   function line(moment: LifeMoment, fill?: Record<string, string>): Promise<void> {
@@ -145,6 +163,7 @@ export function createLife(d: LifeDeps) {
   }
 
   function stopRoutine(): void {
+    stopDuo()
     if (!routine) return
     if (routine.name === 'yawn') d.feel('neutral')
     const peeking = routine.name === 'peek'
@@ -438,6 +457,74 @@ export function createLife(d: LifeDeps) {
     }
   }
 
+  // --- Together with the friend ---------------------------------------------------
+
+  /** Both standing side by side with nothing else going on, and a character that can do the poses. */
+  function canDuo(): boolean {
+    return Boolean(
+      friend?.settled &&
+        d.character()?.setPartner &&
+        !duo &&
+        !routine &&
+        walkTo === null &&
+        !asleep &&
+        !held &&
+        !falling &&
+        !hiddenForGame &&
+        !bantering &&
+        !d.dancing() &&
+        !d.busy() &&
+        !d.bubbleShowing()
+    )
+  }
+
+  function startDuo(name: Duo): void {
+    duo = { name, start: now(), done: -1 }
+    lastDuo = name
+  }
+
+  function stopDuo(): void {
+    if (!duo) return
+    duo = null
+    setPose(null)
+    friend?.act(null)
+    friend?.feel('neutral')
+    d.feel('neutral')
+  }
+
+  /** Plays the beats due this frame, each on whichever character does it. */
+  function duoFrame(ms: number): void {
+    if (!duo) return
+    if (!friend || held || falling || asleep || hiddenForGame || d.dancing() || d.busy()) return stopDuo()
+    const plan = DUOS[duo.name]
+    const at = (ms - duo.start) / 1000
+    const mainId = d.settings().personaId
+    for (const b of beatsBetween(plan, duo.done, at)) {
+      if (doesBeat(b, mainId)) {
+        if (b.pose !== undefined) setPose(b.pose)
+        if (b.feel) d.feel(b.feel)
+        if (b.emote) d.character()?.emote?.(b.emote)
+      }
+      if (doesBeat(b, friend.personaId)) {
+        if (b.pose !== undefined) friend.act(b.pose)
+        if (b.feel) friend.feel(b.feel)
+        if (b.emote) friend.emote(b.emote)
+      }
+    }
+    duo.done = at
+    if (at >= plan.seconds) {
+      stopDuo()
+      nextRoutine = ms + nextRoutineIn() * 1000
+    }
+  }
+
+  /** For trying them out from the developer tools. */
+  function tryDuo(name?: Duo): boolean {
+    if (!canDuo()) return false
+    startDuo(name ?? pickDuo(lastDuo))
+    return true
+  }
+
   // --- Routines -----------------------------------------------------------------
 
   function startRoutine(name: Routine): void {
@@ -496,6 +583,7 @@ export function createLife(d: LifeDeps) {
       if (routine && routine.name !== 'peek') stopRoutine()
       return
     }
+    if (duo) return
     if (routine) {
       if (routine.name === 'peek' && walkTo === null && routine.data !== 1) {
         // Pops back out when the mouse comes near.
@@ -517,6 +605,8 @@ export function createLife(d: LifeDeps) {
     if (walkTo !== null) return
     if (t >= nextRoutine) {
       nextRoutine = t + nextRoutineIn() * 1000
+      // With the friend right there, about half the time they do something together instead.
+      if (canDuo() && Math.random() < 0.55) return startDuo(pickDuo(lastDuo))
       const pick = pickRoutine({
         onFloor: onFloor(),
         userActive: presence.idleSec < 3,
@@ -635,17 +725,43 @@ export function createLife(d: LifeDeps) {
       if (!d.busy()) d.feel('neutral')
     }
 
+    duoFrame(ms)
     if (friend) {
-      const wa = layout?.workArea ?? { x: 0, width: window.innerWidth }
       friend.setVisible(!hiddenForGame)
+      const floor = floorLedge()
+      const resting = !held && !falling && routine?.name !== 'peek'
+      const side = Math.sign(friend.x - body.x) || 1
+      d.character()?.setPartner?.(side)
+      // Looking at each other: always while doing something together, and Suzu
+      // gazes over at Robotico a lot of the rest of the time.
+      const mainHead = new THREE.Vector3(body.x, body.y + d.px() * 0.8, 250)
+      const friendHead = new THREE.Vector3(friend.x, body.y + d.px() * 0.75, 250)
+      const gazing = Math.sin(t * 0.37) + Math.sin(t * 0.13 + 1) > 0.2
+      const mainId = d.settings().personaId
+      if (duo || (gazing && mainId === 'tsundere' && !routine && walkTo === null)) lookOverride = friendHead
       friend.frame(dt, t, {
-        x: onFloor() && routine?.name !== 'peek' ? body.x : null,
+        x: resting && (onFloor() || perch) ? body.x : null,
+        ledge: !resting ? null : perch ? ledgeOf(perch.id) : onFloor() ? floor : null,
         main: body.x,
-        floor: H() - floorWinY(),
+        floor,
         px: d.px(),
-        left: wa.x + d.px() * 0.25,
-        right: wa.x + wa.width - d.px() * 0.25
+        close: duo ? DUOS[duo.name].close : 1,
+        gaze: duo || (gazing && friend.personaId === 'tsundere') ? mainHead : null,
+        ledgeOf,
+        stands: (x, id) => {
+          const w = id === null ? null : wins.find((o) => o.id === id)
+          return !w || surfaceAt(x, w.y, wins, floorWinY(), minTop()).id === id
+        }
       }, new THREE.Vector3(mouse.x, H() - mouse.y, 400))
+      // Little hearts from Suzu now and then.
+      if (ms > nextHeart) {
+        nextHeart = ms + (18 + Math.random() * 25) * 1000
+        if (!duo && !asleep && !hiddenForGame && !d.busy()) {
+          const heart = ['💕', '💗', '✨'][Math.floor(Math.random() * 3)]
+          if (friend.personaId === 'tsundere') friend.emote(heart)
+          else if (mainId === 'tsundere') d.character()?.emote?.(heart)
+        }
+      }
     }
     return { x: body.x, y: body.y, onFloor: onFloor() }
   }
@@ -693,6 +809,9 @@ export function createLife(d: LifeDeps) {
     summoned,
     greet,
     stat,
+    /** Where the characters are, for trying things out from the developer tools. */
+    where: () => ({ x: body.x, y: body.y, friend: friend?.x ?? null, settled: friend?.settled ?? false, duo: duo?.name ?? null }),
+    tryDuo,
     /** The hat and colours being worn now. */
     look() {
       const s = d.settings()

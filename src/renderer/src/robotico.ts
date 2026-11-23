@@ -103,11 +103,15 @@ export function createRobotico(): Character {
   let hat: THREE.Object3D | null = null
   let hatId = 'none'
 
+  /** Which side the friend is on. */
+  let partner = 1
   const neckTarget = new THREE.Euler()
   /** Moves the hands and neck for the current pose, on top of the normal idle motion. */
   function posePass(dt: number, time: number, since: number): void {
     neckTarget.set(0, 0, 0)
     const [l, r] = hands
+    const near = partner < 0 ? l : r
+    const far = partner < 0 ? r : l
     const ease = (p: number) => Math.sin(Math.min(1, Math.max(0, p)) * Math.PI)
     switch (pose) {
       case 'yawn': {
@@ -160,7 +164,62 @@ export function createRobotico(): Character {
         l.position.set(-0.3, 0.66, 0.2)
         r.position.set(0.3, 0.66, 0.2)
         break
+      // Together with the friend. `near` is the hand on the friend's side.
+      case 'hold': {
+        // Reaches across and holds hands, swinging them a little.
+        const p = Math.min(1, since / 0.5)
+        near.position.set(partner * (0.34 + 0.04 * p), 0.3 - 0.06 * p + Math.sin(time * 3) * 0.03 * p, 0.04 + 0.08 * p)
+        neckTarget.z = -partner * 0.06 * p
+        break
+      }
+      case 'heart': {
+        // Each makes half a heart over their heads, meeting in the middle.
+        const p = Math.min(1, since / 0.6)
+        near.position.set(partner * (0.34 + 0.02 * p), 0.34 + 0.62 * p, 0.04)
+        far.position.set(partner * (0.1 * p - 0.34 * (1 - p)), 0.34 + 0.12 * p, 0.04 + 0.16 * p)
+        neckTarget.z = -partner * 0.1 * p
+        break
+      }
+      case 'pat': {
+        // Pats the friend on the head.
+        const p = Math.min(1, since / 0.5)
+        near.position.set(partner * (0.34 + 0.24 * p), 0.34 + 0.72 * p + Math.abs(Math.sin(time * 9)) * 0.06 * p, 0.06)
+        neckTarget.z = -partner * 0.12 * p
+        break
+      }
+      case 'lean':
+        // Head on the friend's shoulder.
+        neckTarget.z = -partner * 0.32 * Math.min(1, since / 0.8)
+        neckTarget.x = 0.06
+        l.position.set(-0.12, 0.3, 0.2)
+        r.position.set(0.12, 0.3, 0.2)
+        break
+      case 'boop': {
+        // A quick poke on the friend's screen.
+        const p = Math.sin(Math.min(1, since / 0.45) * Math.PI)
+        near.position.set(partner * (0.34 + 0.34 * p), 0.34 + 0.46 * p, 0.04 + 0.2 * p)
+        break
+      }
+      case 'antenna':
+        // Leans in so the antennas nearly touch.
+        neckTarget.z = -partner * 0.22 * Math.min(1, since / 0.6)
+        break
+      case 'beep':
+        // Chirping away: little bounces of the hands.
+        l.position.y = 0.36 + Math.abs(Math.sin(time * 12)) * 0.05
+        r.position.y = 0.36 + Math.abs(Math.sin(time * 12 + 1)) * 0.05
+        neckTarget.x = -0.08
+        break
+      case 'glitch':
+        // Frozen with arms limp, twitching now and then.
+        l.position.set(-0.3, 0.2, 0.04)
+        r.position.set(0.3, 0.2, 0.04)
+        neckTarget.z = 0.2 + (Math.sin(time * 37) > 0.9 ? 0.08 : 0)
+        neckTarget.x = 0.12
+        body.position.x = Math.sin(time * 53) > 0.8 ? 0.01 : 0
+        break
     }
+    if (pose !== 'glitch') body.position.x = 0
     if (pose !== 'stretch') body.scale.y += (1 - body.scale.y) * Math.min(1, dt * 10)
     const k = 1 - Math.exp(-dt * 6)
     neck.rotation.x += (neckTarget.x - neck.rotation.x) * k
@@ -199,6 +258,9 @@ export function createRobotico(): Character {
     setMouth(open) {
       mouthOpen = open
     },
+    setPartner(side) {
+      partner = side < 0 ? -1 : 1
+    },
     setPose(next) {
       if (next === pose) return
       pose = next
@@ -221,11 +283,13 @@ export function createRobotico(): Character {
       const since = time - poseAt
       // A yawn opens the mouth wide by itself.
       const yawnMouth = pose === 'yawn' ? Math.max(0, Math.sin(Math.min(1, since / 2.2) * Math.PI)) : 0
+      // Beeping away: the mouth flaps in quick little chirps.
+      const beepMouth = pose === 'beep' ? Math.max(0, Math.sin(time * 15)) * 0.55 : 0
       drawFace(faceCtx, {
         emotion,
-        activity,
+        activity: pose === 'glitch' ? 'glitch' : activity,
         blink,
-        mouth: Math.max(mouthOpen, yawnMouth),
+        mouth: Math.max(mouthOpen, yawnMouth, beepMouth),
         time,
         lookX: head.rotation.y / 0.6,
         lookY: -head.rotation.x / 0.35,
@@ -244,9 +308,10 @@ export function createRobotico(): Character {
       head.rotation.x += (headTarget.x - head.rotation.x) * k
       head.rotation.y += (headTarget.y - head.rotation.y) * k
       // The antenna glows softly.
-      glowMat.color.setHSL(0.08, 1, 0.55 + 0.1 * Math.sin(time * 2))
+      if (pose === 'antenna' || pose === 'beep') glowMat.color.setHSL(Math.floor(time * 6) % 2 ? 0.5 : 0.92, 1, 0.6)
+      else glowMat.color.setHSL(0.08, 1, 0.55 + 0.1 * Math.sin(time * 2))
       // Hands float, and the right hand waves when asked.
-      hands[0].position.y = 0.34 + Math.sin(time * 2.1) * 0.015
+      hands[0].position.set(-0.34, 0.34 + Math.sin(time * 2.1) * 0.015, 0.04)
       if (time < waveUntil) {
         const p = 1 - (waveUntil - time) / 1.6
         hands[1].position.set(0.4, 0.62 + Math.sin(p * Math.PI) * 0.06, 0.08)
