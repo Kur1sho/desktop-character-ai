@@ -470,6 +470,7 @@ export function parseWindowGame(text: string): WindowGame | '' | null {
   const quick = parseGameStart(text)
   if (quick === 'rps' || quick === 'trivia' || quick === 'number') return quick
   if (quick === 'menu') return ''
-  if (/^(?:open|show(?: me)?) (?:the )?games?(?: window| menu)?$/.test(t)) return ''
+  // "open the game hub", "show me the games", "games menu", "hub"
+  if (/^(?:(?:open|show(?: me)?|launch|start|bring up|go to|load)(?: up)? )?(?:the |my |your )?(?:(?:game|games|gaming)(?: (?:hub|window|menu|room|centre|center|list|app))?|(?:game )?hub|arcade)$/.test(t)) return ''
   return null
 }

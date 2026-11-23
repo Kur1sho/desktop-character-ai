@@ -196,6 +196,11 @@ describe('opening the game window', () => {
     ['rock paper scissors', 'rps'],
     ['quiz me', 'trivia'],
     ["let's play a game", ''],
+    ['open the game hub', ''],
+    ['open hub', ''],
+    ['show me the games', ''],
+    ['games menu', ''],
+    ['open spotify', null],
     ['play some lofi', null],
     ['twenty questions', null]
   ])('"%s"', (text, want) => expect(parseWindowGame(text)).toBe(want))
