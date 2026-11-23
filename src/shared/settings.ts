@@ -81,6 +81,31 @@ export interface Settings {
   autoApprove: boolean
   /** The user has been asked about autoApprove once. */
   autoApproveAsked: boolean
+  /** How big the character is, 0.5 to 1.6 times normal. */
+  size: number
+  /** Tiny and tucked away; the size slider is ignored while it's on. */
+  miniMode: boolean
+  /** How often the character speaks up by itself. */
+  chatter: 'off' | 'rare' | 'normal'
+  /** The character plays with the mouse pointer now and then. */
+  cursorPlay: boolean
+  /** Dropped on a window, the character sits on top of it. */
+  sitOnWindows: boolean
+  /** Hide while a Steam game is running. */
+  hideInGames: boolean
+  /** 'auto' wears the character's own; otherwise a hat or colour id from cosmetics. */
+  hat: string
+  color: string
+  /** The other character comes too. */
+  friend: boolean
+}
+
+/** Mini mode's size. */
+export const MINI_SIZE = 0.5
+
+export function characterScale(s: Pick<Settings, 'size' | 'miniMode'>): number {
+  if (s.miniMode) return MINI_SIZE
+  return Number.isFinite(s.size) ? Math.min(1.6, Math.max(0.5, s.size)) : 1
 }
 
 /** What the settings screen sees. Keys never leave the main process; only whether one is saved. */
@@ -99,7 +124,16 @@ export const DEFAULT_SETTINGS: Settings = {
   setupDone: false,
   alwaysAllow: [],
   autoApprove: false,
-  autoApproveAsked: false
+  autoApproveAsked: false,
+  size: 1,
+  miniMode: false,
+  chatter: 'rare',
+  cursorPlay: false,
+  sitOnWindows: true,
+  hideInGames: true,
+  hat: 'auto',
+  color: 'auto',
+  friend: false
 }
 
 export function modelFor(settings: Settings): string {

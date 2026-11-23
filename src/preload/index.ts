@@ -34,7 +34,12 @@ const api: CompanionApi = {
   openGames: (game) => ipcRenderer.send(IPC.openGames, game ?? ''),
   onOpenGame: (cb) => ipcRenderer.on(IPC.openGame, (_e, game) => cb(game)),
   gameSay: (text, emotion) => ipcRenderer.send(IPC.gameSay, text, emotion),
-  onGameSay: (cb) => ipcRenderer.on(IPC.gameSay, (_e, text, emotion) => cb(text, emotion))
+  onGameSay: (cb) => ipcRenderer.on(IPC.gameSay, (_e, text, emotion) => cb(text, emotion)),
+  onPresence: (cb) => ipcRenderer.on(IPC.presence, (_e, p) => cb(p)),
+  listWindows: () => ipcRenderer.invoke(IPC.listWindows),
+  recordStat: (stat) => ipcRenderer.invoke(IPC.recordStat, stat),
+  getProgress: () => ipcRenderer.invoke(IPC.getProgress),
+  firstToday: () => ipcRenderer.invoke(IPC.firstToday)
 }
 
 contextBridge.exposeInMainWorld('companion', api)

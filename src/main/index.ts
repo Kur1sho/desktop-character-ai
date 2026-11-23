@@ -30,6 +30,9 @@ import { clockTime, type Reminder } from '../shared/reminders'
 import { getPersona } from '../shared/personas'
 import { getPublicSettings, getSettings, saveSettings, setApiKey } from './settingsStore'
 import { nativeBrainAvailable, stopNativeBrain, warmUpNativeBrain } from './brain/nativeBrain'
+import { startPresence, stopPresence } from './presence'
+import { listWindows, stopWindows } from './windows'
+import { getProgress, markDay, recordStat } from './progress'
 
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -80,6 +83,7 @@ function createWindow(): void {
     sendLayout()
     // Reminders go off in the companion window (it speaks them), so start once it's there.
     startReminders(showReminder)
+    startPresence((p) => win?.webContents.send(IPC.presence, p))
   })
   win.on('closed', () => (win = null))
 }
@@ -230,6 +234,20 @@ function makeTrayIcon(): Electron.NativeImage {
 function createTray(): void {
   tray = new Tray(makeTrayIcon())
   tray.setToolTip('Desktop Companion')
+  updateTrayMenu()
+  tray.on('click', () => win?.webContents.send(IPC.summon))
+}
+
+/** Saves a settings change made outside the settings window (like mini mode from the tray). */
+function changeSettings(change: Partial<Settings>): void {
+  saveSettings({ ...getSettings(), ...change })
+  win?.webContents.send(IPC.settingsChanged)
+  updateTrayMenu()
+}
+
+function updateTrayMenu(): void {
+  if (!tray) return
+  const s = getSettings()
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
@@ -242,10 +260,12 @@ function createTray(): void {
       { label: 'Activity log', click: openActivityLog },
       { label: 'Load VRM character…', click: () => void pickModel() },
       { type: 'separator' },
+      { label: 'Mini mode', type: 'checkbox', checked: s.miniMode, click: (item) => changeSettings({ miniMode: item.checked }) },
+      { label: 'Bring a friend', type: 'checkbox', checked: s.friend, click: (item) => changeSettings({ friend: item.checked }) },
+      { type: 'separator' },
       { label: 'Quit', click: () => app.quit() }
     ])
   )
-  tray.on('click', () => win?.webContents.send(IPC.summon))
 }
 
 ipcMain.on(IPC.setClickThrough, (_e, passThrough: boolean) => {
@@ -269,6 +289,7 @@ ipcMain.handle(IPC.saveSettings, (_e, next: Settings) => {
   const before = getSettings().personaId
   saveSettings(next)
   win?.webContents.send(IPC.settingsChanged)
+  updateTrayMenu()
   if (next.personaId !== before) win?.webContents.send(IPC.personaChanged, next.personaId)
 })
 ipcMain.handle(IPC.setApiKey, (_e, provider: ProviderId, key: string | null) => setApiKey(provider, key))
@@ -317,7 +338,24 @@ ipcMain.on(IPC.gameSay, (e, text: unknown, emotion: unknown) => {
   win?.webContents.send(IPC.gameSay, String(text).slice(0, 300), String(emotion))
 })
 
+// Hats and colours: progress counts. Wins only count from the game window.
+ipcMain.handle(IPC.recordStat, (e, stat: unknown) => {
+  const fromGames = Boolean(gamesWin && e.sender.id === gamesWin.webContents.id)
+  const fromCompanion = Boolean(win && e.sender.id === win.webContents.id)
+  if ((stat === 'wins' && fromGames) || (stat !== 'wins' && fromCompanion)) return recordStat(stat)
+  return getProgress()
+})
+ipcMain.handle(IPC.getProgress, () => getProgress())
+let firstToday = false
+ipcMain.handle(IPC.firstToday, () => {
+  const first = firstToday
+  firstToday = false
+  return first
+})
+ipcMain.handle(IPC.listWindows, () => (win && getSettings().sitOnWindows ? listWindows(win.getBounds()) : []))
+
 app.whenReady().then(() => {
+  firstToday = markDay()
   createWindow()
   createTray()
   // First launch (or never seen it): show the one-click connections screen.
@@ -369,6 +407,8 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   stopNativeBrain()
   stopVision()
+  stopPresence()
+  stopWindows()
 })
 // The overlay is the app; closing the settings window shouldn't quit.
 app.on('window-all-closed', () => app.quit())

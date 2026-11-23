@@ -3,6 +3,9 @@ import type { Action, ActionResult } from './actions'
 import type { Layout } from './layout'
 import type { Emotion } from './personas'
 import type { Reminder } from './reminders'
+import type { Presence } from './chatter'
+import type { Progress, Stat } from './cosmetics'
+import type { WinRect } from './perch'
 import type { ProviderId, PublicSettings, Settings } from './settings'
 
 export const IPC = {
@@ -37,7 +40,12 @@ export const IPC = {
   cancelReminders: 'reminders:cancel',
   openGames: 'games:open',
   openGame: 'games:show',
-  gameSay: 'games:say'
+  gameSay: 'games:say',
+  presence: 'life:presence',
+  listWindows: 'life:windows',
+  recordStat: 'life:stat',
+  getProgress: 'life:progress',
+  firstToday: 'life:first-today'
 } as const
 
 export interface AskOptions {
@@ -117,4 +125,13 @@ export interface CompanionApi {
   gameSay(text: string, emotion: Emotion): void
   /** Companion window: a line from the game window to say. */
   onGameSay(cb: (text: string, emotion: Emotion) => void): void
+  /** Every couple of seconds: how long since the mouse or keyboard was used, and any Steam game running. */
+  onPresence(cb: (p: Presence) => void): void
+  /** Other windows on screen, front first, so the character can sit on them. Empty if not possible. */
+  listWindows(): Promise<WinRect[]>
+  /** Counts a pat, a win, a dance... towards unlocking hats and colours. */
+  recordStat(stat: Stat): Promise<Progress>
+  getProgress(): Promise<Progress>
+  /** True the first time the app starts on a new day (for the greeting). */
+  firstToday(): Promise<boolean>
 }

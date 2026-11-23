@@ -24,6 +24,10 @@ export interface ChatUi {
   /** Shows a message that stays until replaced (for "Listening…" and similar). */
   status(text: string): void
   hide(): void
+  /** Closes the text box (without sending). */
+  closeInput(): void
+  /** The user is in the middle of something with it: typing, waiting for a reply, or a question is open. */
+  isEngaged(): boolean
   /** Sends text to the character and shows the reply. */
   ask(text: string): Promise<void>
   /** Asks the user to OK an action, with buttons. `answer` settles it from elsewhere (a spoken "yes"). */
@@ -224,6 +228,8 @@ export function createChat(
     el: root,
     isActive: () => bubble.classList.contains('show') || input.classList.contains('show'),
     isThinking: () => waiting,
+    isEngaged: () => busy || waiting || pending !== null || input.classList.contains('show'),
+    closeInput: () => closeInput(),
     place(x, y) {
       root.style.left = `${Math.round(x)}px`
       root.style.top = `${Math.round(y)}px`

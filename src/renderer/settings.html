@@ -40,6 +40,33 @@
     </fieldset>
 
     <fieldset>
+      <legend>On your desktop</legend>
+      <label for="size">Size <span id="sizeValue" class="hint" style="font-weight: 400"></span></label>
+      <input id="size" type="range" min="0.5" max="1.6" step="0.05" style="padding: 0" />
+      <label><input id="miniMode" type="checkbox" style="width: auto; margin-right: 6px" />Mini mode (tiny and out of the way)</label>
+      <label for="chatter">Speaks up by itself</label>
+      <select id="chatter">
+        <option value="off">Never (only when I talk to it)</option>
+        <option value="rare">Rarely (hellos, break reminders, games)</option>
+        <option value="normal">Sometimes (and the odd random thought)</option>
+      </select>
+      <label><input id="sitOnWindows" type="checkbox" style="width: auto; margin-right: 6px" />Sit on top of windows when I drop it there</label>
+      <label><input id="hideInGames" type="checkbox" style="width: auto; margin-right: 6px" />Hide while I'm playing a Steam game</label>
+      <label><input id="cursorPlay" type="checkbox" style="width: auto; margin-right: 6px" />Play with my mouse pointer now and then</label>
+      <label><input id="friend" type="checkbox" style="width: auto; margin-right: 6px" />Bring a friend (<span id="friendName">Suzu</span> comes too)</label>
+      <p class="hint">Rub its head to give it a pat. Drag it to pick it up, and let go to drop or throw it. It naps when you're away and yawns, stretches and drums along while you work. It only knows whether you're using the PC, never what you type.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Look</legend>
+      <label for="hat">Hat</label>
+      <select id="hat"></select>
+      <label for="color">Colour</label>
+      <select id="color"></select>
+      <p class="hint" id="lookHint">Some are locked. Spend time together, win games and give pats to unlock them.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>AI brain</legend>
       <label for="provider">Provider</label>
       <select id="provider"></select>

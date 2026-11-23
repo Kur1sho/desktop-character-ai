@@ -4,7 +4,7 @@
 import type { Emotion } from '@shared/personas'
 
 /** What he's doing, which can change the face whatever the emotion. */
-export type Activity = 'idle' | 'listening' | 'thinking' | 'dancing'
+export type Activity = 'idle' | 'listening' | 'thinking' | 'dancing' | 'sleeping'
 
 export interface FaceState {
   emotion: Emotion
@@ -61,7 +61,8 @@ export const POPUPS: Partial<Record<Emotion, string[]>> = {
 /** Emoji for an activity, shown now and then while it lasts. */
 export const ACTIVITY_POPUPS: Partial<Record<Activity, string[]>> = {
   dancing: ['🎵', '🎶'],
-  thinking: ['💭']
+  thinking: ['💭'],
+  sleeping: ['💤']
 }
 
 const L = { x: 38, y: 34 }

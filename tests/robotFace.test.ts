@@ -22,7 +22,7 @@ function fakeCanvas() {
 }
 
 describe('robot face', () => {
-  const activities: Activity[] = ['idle', 'listening', 'thinking', 'dancing']
+  const activities: Activity[] = ['idle', 'listening', 'thinking', 'dancing', 'sleeping']
   it('draws every emotion and activity, blinking and talking, without bad numbers', () => {
     for (const emotion of EMOTIONS)
       for (const activity of activities)

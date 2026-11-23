@@ -1,5 +1,9 @@
 import type { Object3D, Vector3 } from 'three'
 import type { Emotion } from '@shared/personas'
+import type { Look } from '@shared/cosmetics'
+
+/** Things the body does by itself, or while being played with. */
+export type BodyPose = 'yawn' | 'stretch' | 'drum' | 'sleep' | 'held' | 'swat' | 'walk' | 'peek'
 
 export interface DanceMove {
   /** 0 on the beat, rising to 1 just before the next. */
@@ -27,7 +31,11 @@ export interface Character {
   /** Show an emotion on the face until the next one. */
   setEmotion(emotion: Emotion): void
   /** What the character is busy with (listening, thinking, dancing), for faces that can show it. */
-  setActivity?(activity: 'idle' | 'listening' | 'thinking' | 'dancing'): void
+  setActivity?(activity: 'idle' | 'listening' | 'thinking' | 'dancing' | 'sleeping'): void
+  /** Yawning, stretching, drumming, sleeping, dangling... null to stand normally. */
+  setPose?(pose: BodyPose | null): void
+  /** Hat and colours, for characters that can change them. */
+  setLook?(look: Look): void
   /** Pop up an emoji beside the head, if the character can. */
   emote?(emoji: string): void
   /** 0 = mouth closed, 1 = wide open. Used for lip sync. */
