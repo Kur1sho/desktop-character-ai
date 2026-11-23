@@ -22,7 +22,8 @@ export default defineConfig({
         input: {
           index: resolve('src/renderer/index.html'),
           settings: resolve('src/renderer/settings.html'),
-          welcome: resolve('src/renderer/welcome.html')
+          welcome: resolve('src/renderer/welcome.html'),
+          games: resolve('src/renderer/games.html')
         }
       }
     }

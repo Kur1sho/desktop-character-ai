@@ -34,7 +34,10 @@ export const IPC = {
   visionStatus: 'vision:status',
   reminderDue: 'reminders:due',
   listReminders: 'reminders:list',
-  cancelReminders: 'reminders:cancel'
+  cancelReminders: 'reminders:cancel',
+  openGames: 'games:open',
+  openGame: 'games:show',
+  gameSay: 'games:say'
 } as const
 
 export interface AskOptions {
@@ -106,4 +109,12 @@ export interface CompanionApi {
   listReminders(): Promise<Reminder[]>
   /** Cancels these (by id) and returns the ones that were cancelled. */
   cancelReminders(ids: string[]): Promise<Reminder[]>
+  /** Opens the game window, on one game ('chess', 'poker', ...) or the menu. */
+  openGames(game?: string): void
+  /** Game window: called when it should switch to a game ('' for the menu). */
+  onOpenGame(cb: (game: string) => void): void
+  /** Game window: the character says this on the desktop. */
+  gameSay(text: string, emotion: Emotion): void
+  /** Companion window: a line from the game window to say. */
+  onGameSay(cb: (text: string, emotion: Emotion) => void): void
 }

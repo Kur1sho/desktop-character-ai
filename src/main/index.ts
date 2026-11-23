@@ -35,6 +35,7 @@ let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let settingsWin: BrowserWindow | null = null
 let welcomeWin: BrowserWindow | null = null
+let gamesWin: BrowserWindow | null = null
 
 const TALK_HOTKEY = 'CommandOrControl+Shift+Space'
 const TYPE_HOTKEY = 'CommandOrControl+Shift+T'
@@ -94,8 +95,9 @@ function showReminder(r: Reminder, late: boolean): void {
 
 function loadPage(target: BrowserWindow, page: string): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
+  const [file, hash] = page.split('#')
   if (devUrl) void target.loadURL(`${devUrl}/${page}`)
-  else void target.loadFile(join(__dirname, '../renderer', page))
+  else void target.loadFile(join(__dirname, '../renderer', file), hash ? { hash } : undefined)
 }
 
 function openSettings(): void {
@@ -117,6 +119,36 @@ function openSettings(): void {
   })
   loadPage(settingsWin, 'settings.html')
   settingsWin.on('closed', () => (settingsWin = null))
+}
+
+const GAME_IDS = ['chess', 'checkers', 'poker', 'blackjack', 'rps', 'trivia', 'number']
+
+/** The game window: chess, checkers, poker, blackjack and quick games, with the character talking. */
+function openGames(game: string): void {
+  const id = GAME_IDS.includes(game) ? game : ''
+  if (gamesWin) {
+    gamesWin.webContents.send(IPC.openGame, id)
+    if (gamesWin.isMinimized()) gamesWin.restore()
+    gamesWin.focus()
+    return
+  }
+  gamesWin = new BrowserWindow({
+    width: 1080,
+    height: 780,
+    minWidth: 760,
+    minHeight: 600,
+    title: 'Games',
+    backgroundColor: '#14181d',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+  loadPage(gamesWin, id ? `games.html#${id}` : 'games.html')
+  gamesWin.on('closed', () => (gamesWin = null))
 }
 
 /** The welcome screen: one-click account connections and the "don't keep asking" switch. */
@@ -201,6 +233,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Summon', click: () => win?.webContents.send(IPC.summon) },
+      { label: 'Play a game', click: () => openGames('') },
       { label: 'Talk (Ctrl+Shift+Space)', click: startListening },
       { label: 'Type (Ctrl+Shift+T)', click: openChat },
       { label: 'Connections…', click: openWelcome },
@@ -277,6 +310,12 @@ function openLog(file: string): void {
   void shell.openPath(file)
 }
 ipcMain.on(IPC.openSettings, openSettings)
+ipcMain.on(IPC.openGames, (_e, game: unknown) => openGames(String(game ?? '')))
+// Lines from the game window are said by the character on the desktop (only text, never actions).
+ipcMain.on(IPC.gameSay, (e, text: unknown, emotion: unknown) => {
+  if (!gamesWin || e.sender.id !== gamesWin.webContents.id) return
+  win?.webContents.send(IPC.gameSay, String(text).slice(0, 300), String(emotion))
+})
 
 app.whenReady().then(() => {
   createWindow()
