@@ -30,7 +30,11 @@ const api: CompanionApi = {
   onVisionStatus: (cb) => ipcRenderer.on(IPC.visionStatus, (_e, text) => cb(text)),
   onReminderDue: (cb) => ipcRenderer.on(IPC.reminderDue, (_e, r, late) => cb(r, late)),
   listReminders: () => ipcRenderer.invoke(IPC.listReminders),
-  cancelReminders: (ids) => ipcRenderer.invoke(IPC.cancelReminders, ids)
+  cancelReminders: (ids) => ipcRenderer.invoke(IPC.cancelReminders, ids),
+  openGames: (game) => ipcRenderer.send(IPC.openGames, game ?? ''),
+  onOpenGame: (cb) => ipcRenderer.on(IPC.openGame, (_e, game) => cb(game)),
+  gameSay: (text, emotion) => ipcRenderer.send(IPC.gameSay, text, emotion),
+  onGameSay: (cb) => ipcRenderer.on(IPC.gameSay, (_e, text, emotion) => cb(text, emotion))
 }
 
 contextBridge.exposeInMainWorld('companion', api)

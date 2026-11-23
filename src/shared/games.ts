@@ -448,3 +448,28 @@ export function createGameSession(
     }
   }
 }
+
+// --- Games with a board or cards (they open in the game window) ---------------------------
+
+export type WindowGame = 'chess' | 'checkers' | 'poker' | 'blackjack' | 'rps' | 'trivia' | 'number'
+
+/** "let's play chess", "deal me in for some poker", "play blackjack with me". '' means the game menu. */
+export function parseWindowGame(text: string): WindowGame | '' | null {
+  const t = tidy(text)
+  if (t.split(' ').length > 12) return null
+  const start = new RegExp(`${START}(chess|checkers|draughts|poker|texas hold ?'?em|hold ?'?em|blackjack|black jack|twenty one|21)(?: game)?(?: with me| against you| vs you)?$`)
+  const m = t.match(start)
+  if (m) {
+    const w = m[1]
+    if (w === 'chess') return 'chess'
+    if (w === 'checkers' || w === 'draughts') return 'checkers'
+    if (/poker|hold/.test(w)) return 'poker'
+    return 'blackjack'
+  }
+  if (/^(?:deal me in|let'?s play cards|play cards(?: with me)?|card games?)$/.test(t)) return ''
+  const quick = parseGameStart(text)
+  if (quick === 'rps' || quick === 'trivia' || quick === 'number') return quick
+  if (quick === 'menu') return ''
+  if (/^(?:open|show(?: me)?) (?:the )?games?(?: window| menu)?$/.test(t)) return ''
+  return null
+}

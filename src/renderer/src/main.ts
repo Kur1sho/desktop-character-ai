@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Layout } from '@shared/layout'
 import type { CompanionApi } from '@shared/ipc'
 import type { AskOptions, ChatReply } from '@shared/ipc'
-import { getPersona, parseEmotion, type Emotion } from '@shared/personas'
+import { EMOTIONS, getPersona, parseEmotion, type Emotion } from '@shared/personas'
 import { shortenReply } from '@shared/brevity'
 import { DEFAULT_SETTINGS, modelFor, type Settings } from '@shared/settings'
 import { think, warmUp } from './brain/brain'
@@ -12,7 +12,8 @@ import { blinkAmount, easeOutBack } from './idle'
 import { createChat } from './chat'
 import { createActions } from './actions'
 import { describeCancelled, describeList, parseReminderQuery, pickToCancel } from '@shared/reminders'
-import { createGameSession, judgePrompt, readJudgement } from '@shared/games'
+import { createGameSession, judgePrompt, parseWindowGame, readJudgement } from '@shared/games'
+import { gameLine } from '@shared/gameLines'
 import { screenRequest } from '@shared/screen'
 import { listenToMusic, type MusicListener } from './dance/music'
 import { approachAngle, Choreographer, MoodTracker, type Mood, type Pose } from './dance/choreo'
@@ -181,8 +182,26 @@ const chat = createChat(
         return describeCancelled(gone, q.kind, now)
       }
     : null,
-  api ? (text) => games.handle(text) : null
+  api
+    ? async (text) => {
+        // Board and card games (and the quick ones, with visuals) open in the game window.
+        const windowGame = parseWindowGame(text)
+        if (windowGame !== null) {
+          api.openGames(windowGame)
+          const line = gameLine(settings.personaId, 'start')
+          return { say: windowGame ? line.text : "Pick a game. I'll wait. Impatiently.", emotion: line.emotion }
+        }
+        return games.handle(text)
+      }
+    : null
 )
+// What the character says about the game in the game window.
+api?.onGameSay((text, emotion) => {
+  summon()
+  feel(EMOTIONS.includes(emotion as Emotion) ? (emotion as Emotion) : 'neutral')
+  chat.say(text)
+  void sayAloud(text)
+})
 // "Downloading my eyes… 40%", "Looking…"
 api?.onVisionStatus((text) => chat.status(text))
 let speaking = false
