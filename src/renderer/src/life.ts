@@ -54,6 +54,12 @@ export interface Spot {
 
 const now = () => performance.now()
 
+/** What the friend says, grabbing on as the main character is picked up. */
+const HANG_LINES: Record<string, string[]> = {
+  tsundere: ["Wait for me!", "Don't you dare leave without me!", 'Take me with you!', 'W-where are we going?!'],
+  robotico: ["Hold on, I'm coming too!", 'Wheee!', 'Not without me!', 'Robotico, reporting for hitchhiking!']
+}
+
 export function createLife(d: LifeDeps) {
   const body = newBody(0, 0)
   let layout: Layout | null = null
@@ -149,6 +155,16 @@ export function createLife(d: LifeDeps) {
     if (!w || w.y < minTop() || w.y >= floorWinY() - 4) return null
     const inset = Math.min(d.px() * 0.18, w.width / 2 - 1)
     return { id, y: H() - w.y, left: w.x + inset, right: w.x + w.width - inset }
+  }
+
+  /** Where the main character's feet are on screen, swinging and all (scene units). */
+  const feetAt = new THREE.Vector3()
+  function mainFeet(): { x: number; y: number } | null {
+    const root = d.character()?.root
+    if (!root) return null
+    root.updateWorldMatrix(true, false)
+    root.getWorldPosition(feetAt)
+    return { x: feetAt.x, y: feetAt.y }
   }
 
   const onFloor = () => !held && !falling && perch === null && Math.abs(body.y - (H() - floorWinY())) < 1
@@ -290,6 +306,12 @@ export function createLife(d: LifeDeps) {
     if (t - lastGrabLine > 30_000 && !d.busy()) {
       lastGrabLine = t
       void line('grabbed')
+    }
+    // The friend jumps on and hangs off it, sometimes with something to say.
+    if (friend && !hiddenForGame && !asleep && Math.random() < 0.5 && !d.busy()) {
+      const f = friend
+      const lines = HANG_LINES[f.personaId] ?? HANG_LINES.robotico
+      setTimeout(() => held && f === friend && void f.say(lines[Math.floor(Math.random() * lines.length)], 'excited', d.settings().voiceOutput), 450)
     }
     // Find out where the windows are while it's held, ready for the drop.
     if (d.settings().sitOnWindows && d.api) void d.api.listWindows().then((w) => (wins = w))
@@ -748,6 +770,14 @@ export function createLife(d: LifeDeps) {
         close: duo ? DUOS[duo.name].close : 1,
         gaze: duo || (gazing && friend.personaId === 'tsundere') ? mainHead : null,
         ledgeOf,
+        world: world(),
+        ledgeUnder: (x, y) => {
+          const s = surfaceAt(x, H() - y - 1, wins, floorWinY(), minTop())
+          return (s.id !== null && ledgeOf(s.id)) || floor
+        },
+        hangFrom: held && !hiddenForGame ? mainFeet() : null,
+        mainVx: body.vx,
+        mainVy: body.vy,
         stands: (x, id) => {
           const w = id === null ? null : wins.find((o) => o.id === id)
           return !w || surfaceAt(x, w.y, wins, floorWinY(), minTop()).id === id

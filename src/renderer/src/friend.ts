@@ -9,6 +9,7 @@ import type { BodyPose, Character, DanceMove } from './character'
 import { createRobotico } from './robotico'
 import { blinkAmount } from './idle'
 import { speak } from './voice/speaker'
+import { fallStep, holdStep, newBody, type Body, type World } from '@shared/physics'
 import { besideOn, crossesMain, hopAt, hopSeconds, JUMP_REACH, laneLook, type Ledge } from '@shared/walkLane'
 
 export interface Friend {
@@ -49,6 +50,15 @@ export interface Near {
   ledgeOf(id: number): Ledge | null
   /** Whether there's room to stand at x on that ledge (not covered by another window). */
   stands(x: number, id: number | null): boolean
+  /** For falling: walls, and what's underneath. */
+  world: World
+  /** What it would be standing on, having landed at (x, y). */
+  ledgeUnder(x: number, y: number): Ledge
+  /** The main character's feet while it's being carried (to hang off), or null. */
+  hangFrom: { x: number; y: number } | null
+  /** How fast the main character is moving (when it's let go, the friend falls with it). */
+  mainVx: number
+  mainVy: number
 }
 
 interface Hop {
@@ -69,8 +79,11 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
   const persona = getPersona(personaId)
   const character: Character = createRobotico()
   const stage = new THREE.Group()
+  // Swings round the point it hangs from (or its middle, when tumbling down).
+  const swing = new THREE.Group()
   const holder = new THREE.Group()
-  stage.add(holder)
+  stage.add(swing)
+  swing.add(holder)
   holder.add(character.root)
   scene.add(stage)
   const bubble = document.getElementById('friendBubble') as HTMLDivElement
@@ -91,6 +104,16 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
   let landedAt = -1
   let settled = false
   let acting: BodyPose | null = null
+  /** Hanging off the main character: jumping up to it, then swinging from its feet. */
+  let hang: { start: number; from: { x: number; y: number }; body: Body } | null = null
+  /** Falling (a window closed under it, or it let go). */
+  let fall: Body | null = null
+  /** From its hands, holding on over its head, down to its feet. */
+  const hangLength = () => px * 0.92 * (1.12 / character.height)
+  function startFall(vx: number, vy: number, angle = 0, spin = 0): void {
+    hop = null
+    fall = { ...newBody(x, y), vx, vy, angle, spin }
+  }
   function hopTo(ledge: Ledge, toX: number, t: number, from = { x, y }): void {
     const to = { x: Math.min(ledge.right, Math.max(ledge.left, toX)), y: ledge.y }
     hop = { from, to, ledge, start: t, seconds: hopSeconds(from, to, px) }
@@ -100,6 +123,75 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
   character.setEmotion(resting)
   character.setLook?.(resolveLook(personaId, 'auto', 'auto', progress))
   character.wave()
+
+  function finishFrame(dt: number, t: number, lookAt: THREE.Vector3, headTop: number): void {
+    character.lookAt(lookAt)
+    character.setBlink(asleep ? 1 : blinkAmount(t, 1.7))
+    character.setActivity?.(asleep ? 'sleeping' : dancing ? 'dancing' : 'idle')
+    character.setMouth(mouth)
+    character.update(dt, t)
+    bubble.style.left = `${Math.min(window.innerWidth - 130, Math.max(130, x))}px`
+    bubble.style.top = `${window.innerHeight - (headTop + 12)}px`
+  }
+
+  /** Jumps up to the main character's feet, then hangs on and swings as it's carried about. */
+  function hangFrame(dt: number, t: number, near: Near, from: { x: number; y: number }): void {
+    if (!hang) return
+    const len = hangLength()
+    const leap = Math.min(0.5, 0.22 + (Math.hypot(from.x - hang.from.x, from.y - hang.from.y) / px) * 0.12)
+    const p = (t - hang.start) / leap
+    const b = hang.body
+    if (p < 1) {
+      // On the way up: an arc from where it was to the feet, which may be moving.
+      const at = hopAt(hang.from, from, p, px)
+      b.vx = (at.x - b.x) / Math.max(dt, 1e-3)
+      b.vy = (at.y - b.y) / Math.max(dt, 1e-3)
+      b.x = at.x
+      b.y = at.y
+      b.angle = 0
+      b.spin = 0
+    } else holdStep(b, from.x, from.y, dt, len)
+    settled = false
+    depth = 0
+    character.root.scale.setScalar((px * 0.92) / character.height)
+    holder.scale.set(1, 1, 1)
+    stage.position.set(b.x, b.y, 2)
+    swing.rotation.z = b.angle
+    holder.position.y = -len
+    x = b.x + Math.sin(b.angle) * len
+    y = b.y - Math.cos(b.angle) * len
+    character.setPose?.('hang')
+    // Holding on tight, gazing up at it.
+    finishFrame(dt, t, new THREE.Vector3(from.x, from.y + px * 0.6, 250), b.y + px * 0.25)
+  }
+
+  /** Tumbles down with gravity, like the main character does, and lands on whatever's below. */
+  function fallFrame(dt: number, t: number, near: Near, mouse: THREE.Vector3): void {
+    if (!fall) return
+    const hit = fallStep(fall, dt, near.world)
+    x = fall.x
+    y = fall.y
+    if (hit) landedAt = t
+    const h = px * 0.92 * 0.5
+    character.root.scale.setScalar((px * 0.92) / character.height)
+    stage.position.set(x, y + h, 0)
+    swing.rotation.z = fall.angle
+    holder.position.y = -h
+    const squash = Math.max(0, 1 - (t - landedAt) / 0.18)
+    holder.scale.set(1 + squash * 0.12, 1 - squash * 0.16, 1 + squash * 0.12)
+    character.setPose?.('held')
+    settled = false
+    if (fall.vy === 0 && Math.abs(fall.vx) < 1 && Math.abs(fall.angle) < 0.05) {
+      // Landed: back on its feet on the taskbar or a window.
+      fall = null
+      on = near.ledgeUnder(x, y)
+      y = on.y
+      want = x = Math.min(on.right, Math.max(on.left, x))
+      swing.rotation.z = 0
+      character.setEmotion(resting)
+    }
+    finishFrame(dt, t, mouse, y + px * 0.92)
+  }
 
   return {
     personaId,
@@ -123,16 +215,33 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
         y = on.y
         x = want = besideOn(on, near.main, gap)
       }
+      // Grabs onto the main character when it's picked up, and lets go when it's dropped.
+      if (near.hangFrom && !asleep && !hang) {
+        hop = null
+        fall = null
+        lane = 0
+        hang = { start: t, from: { x, y: y + hangLength() }, body: newBody(x, y + hangLength()) }
+        character.setEmotion('excited')
+        character.emote?.('💕')
+      } else if (!near.hangFrom && hang) {
+        const b = hang.body
+        hang = null
+        // Lets go as the main character is dropped (or thrown), and goes the same way.
+        startFall(near.mainVx, near.mainVy, b.angle, b.spin)
+        character.setEmotion('surprised')
+      }
+      if (hang) return hangFrame(dt, t, near, near.hangFrom!)
+      if (fall) return fallFrame(dt, t, near, mouse)
+      if (!dancing) holder.position.y = 0
+      swing.rotation.z = 0
       // Its own window moved, or closed under it.
       if (!hop && on.id !== null) {
         const now = near.ledgeOf(on.id)
-        if (!now) hopTo(near.floor, x, t)
-        else {
-          x += now.left - on.left
-          want += now.left - on.left
-          y = now.y
-          on = now
-        }
+        if (!now) return startFall(0, 0)
+        x += now.left - on.left
+        want += now.left - on.left
+        y = now.y
+        on = now
       }
       // Follows the main character: walks over on the same ledge, or jumps up (or down) to it.
       if (!hop && near.x !== null && near.ledge) {
@@ -166,7 +275,12 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
             y = still.y
             want = x
             landedAt = t
-          } else hopTo(near.floor, x, t, done.to)
+          } else {
+            // The window went while it was in the air: it falls the rest of the way.
+            x = done.to.x
+            y = done.to.y
+            startFall(0, 0)
+          }
         }
       } else {
         walking = Math.abs(want - x) > 4
@@ -193,14 +307,7 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
       settled = !hop && !walking && near.x !== null && near.ledge?.id === on.id && Math.abs(Math.abs(x - near.main) - gap) < 6
       character.setPartner?.(near.main < x ? -1 : 1)
       if (!dancing) character.setPose?.(asleep ? 'sleep' : walking || hop ? 'walk' : acting)
-      character.lookAt(near.gaze ?? mouse)
-      character.setBlink(asleep ? 1 : blinkAmount(t, 1.7))
-      character.setActivity?.(asleep ? 'sleeping' : dancing ? 'dancing' : 'idle')
-      character.setMouth(mouth)
-      character.update(dt, t)
-      const top = window.innerHeight - (y + look.lift + px * 0.92 * look.scale + 12)
-      bubble.style.left = `${Math.min(window.innerWidth - 130, Math.max(130, x))}px`
-      bubble.style.top = `${top}px`
+      finishFrame(dt, t, near.gaze ?? mouse, y + look.lift + px * 0.92 * look.scale)
     },
     async say(text, emotion, aloud) {
       character.setEmotion(emotion === 'neutral' ? resting : emotion)
@@ -229,6 +336,7 @@ export function createFriend(scene: THREE.Scene, mainPersonaId: string, progress
       if (!v) bubble.classList.remove('show')
     },
     dance(move) {
+      if (hang || fall) return
       dancing = move !== null
       if (dancing) character.setPose?.(null)
       character.dance(move)
