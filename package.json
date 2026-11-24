@@ -13,24 +13,30 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "postinstall": "node node_modules/electron/install.js"
+    "postinstall": "node node_modules/electron/install.js",
+    "notices": "node scripts/make-notices.mjs",
+    "dist": "electron-vite build && node scripts/fetch-llama-server.mjs && node scripts/make-notices.mjs && electron-builder --config electron-builder.config.cjs --win nsis",
+    "dist:steam": "electron-vite build && node scripts/fetch-llama-server.mjs && node scripts/make-notices.mjs && electron-builder --config electron-builder.config.cjs --win dir",
+    "sign:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-dev.ps1",
+    "dist:check": "electron-vite build && node scripts/make-notices.mjs && electron-builder --config electron-builder.config.cjs --linux dir"
   },
   "devDependencies": {
+    "@huggingface/transformers": "^4.3.2",
+    "@pixiv/three-vrm": "^3.5.5",
     "@types/node": "^26.6.6",
     "@types/three": "^0.187.0",
+    "chess.js": "^1.4.0",
     "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
+    "three": "^0.187.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
-    "@huggingface/transformers": "^4.3.2",
-    "@pixiv/three-vrm": "^3.5.5",
-    "chess.js": "^1.4.0",
-    "node-llama-cpp": "3.22.3",
-    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
-    "three": "^0.187.0"
+    "node-llama-cpp": "3.22.3"
   }
 }

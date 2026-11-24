@@ -1,0 +1,16 @@
+{
+  "_comment": "Copy to signing.local.json (which git ignores) and fill in ONE of the two set-ups. See docs/signing.md.",
+
+  "mode": "certificate",
+  "publisherName": "Your Name As On The Certificate",
+  "certificateSha1": "THUMBPRINT-OF-YOUR-CERTIFICATE",
+  "timeStampServer": "http://timestamp.digicert.com",
+
+  "_azure_example": {
+    "mode": "azure",
+    "publisherName": "Your Company Ltd",
+    "endpoint": "https://weu.codesigning.azure.net",
+    "codeSigningAccountName": "your-signing-account",
+    "certificateProfileName": "your-profile"
+  }
+}

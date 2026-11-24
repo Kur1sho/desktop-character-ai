@@ -5,3 +5,10 @@ dist/
 .DS_Store
 # Character files are large; commit them on purpose with git add -f if wanted
 assets/characters/*.vrm
+# Packaging: downloaded or generated at build time, and the output
+build/llama-server/
+build/.llama-download/
+build/THIRD_PARTY_NOTICES.txt
+release/
+# Your code-signing settings (never commit secrets)
+signing.local.json

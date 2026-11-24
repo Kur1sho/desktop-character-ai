@@ -62,6 +62,9 @@ Characters live on your taskbar, pop up when summoned, and (in later phases) tal
 | `npm start` | Runs the built app |
 | `npm test` | Runs the unit tests |
 | `npm run typecheck` | Checks types |
+| `npm run dist` | Makes the signed Windows installer in `release/` (see [docs/signing.md](docs/signing.md)) |
+| `npm run dist:steam` | Makes the signed folder to upload to Steam |
+| `npm run sign:dev` | Signs the development copy of Electron, for PCs with Smart App Control on |
 
 ## Project layout
 
@@ -78,4 +81,4 @@ assets/         Character models (VRM files are git-ignored by default)
 
 Copyright Kur1sho. All rights reserved.
 
-Third-party code shipped with the app keeps its own licence: chess.js (BSD-2-Clause) for the chess rules; node-llama-cpp (MIT); Silero VAD (MIT); the spelling word list from SCOWL (Kevin Atkinson's permissive licence, kept in `src/shared/spelling/words.ts`). Their licence texts must be included with the installer. The action layer will be published separately under an open-source licence.
+Third-party code shipped with the app keeps its own licence: chess.js (BSD-2-Clause) for the chess rules; node-llama-cpp (MIT); Silero VAD (MIT); the spelling word list from SCOWL (Kevin Atkinson's permissive licence, kept in `src/shared/spelling/words.ts`). Their licence texts, and every other library's, are collected into `THIRD_PARTY_NOTICES.txt`, which ships with the app (`npm run notices` writes it). The action layer will be published separately under an open-source licence.

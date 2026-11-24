@@ -119,10 +119,16 @@ async function unpack(archive: string, dir: string): Promise<void> {
   return archive.endsWith('.tar.gz') ? runTool('tar', ['-xzf', archive, '-C', dir]) : runTool('unzip', ['-q', '-o', archive, '-d', dir])
 }
 
-/** Downloads llama-server once (from llama.cpp's official GitHub releases) and returns its path. */
+/**
+ * llama-server's path. The installed app carries its own copy (signed with the app,
+ * so Smart App Control lets it run); a development copy downloads it once from
+ * llama.cpp's official GitHub releases.
+ */
 async function ensureServerProgram(status: VisionStatus): Promise<string> {
-  const dir = join(baseDir(), 'llama-server')
   const exe = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server'
+  const bundled = app.isPackaged ? findFile(join(process.resourcesPath, 'llama-server'), exe) : null
+  if (bundled) return bundled
+  const dir = join(baseDir(), 'llama-server')
   const existing = findFile(dir, exe)
   if (existing) return existing
 

@@ -213,8 +213,11 @@ async function pickModel(): Promise<void> {
   win.webContents.send(IPC.loadModel, toArrayBuffer(readFileSync(path)), basename(path))
 }
 
-/** Draws a small teal dot as a placeholder tray icon (BGRA pixels). */
+/** Robotico's head (the app icon), or a teal dot if it can't be found. */
 function makeTrayIcon(): Electron.NativeImage {
+  const file = app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'build', 'icon.png')
+  const icon = existsSync(file) ? nativeImage.createFromPath(file) : null
+  if (icon && !icon.isEmpty()) return icon.resize({ width: 32, height: 32, quality: 'best' })
   const size = 32
   const buf = Buffer.alloc(size * size * 4)
   for (let y = 0; y < size; y++) {
